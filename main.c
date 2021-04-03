@@ -338,7 +338,8 @@ void *handle_request(void * socket) {
         char * parsed_request[3];
         // printf("%s", client_message);
 
-        parse_http_request(client_message);
+        int status;
+        parse_http_request(client_message, &status);
 
         parsed_request[0] = strtok(client_message, " \t\n");
         // Only accept GET method
