@@ -9,7 +9,8 @@
 #include <fcntl.h>
 #include <semaphore.h>
 
-#define PUBLIC_FOLDER "/home/server/public"
+//#define PUBLIC_FOLDER "/home/server/public"
+#define PUBLIC_FOLDER "/home/sscid/sources"
 #define PORT_NUMBER 8080
 #define BUFFER_SIZE 4096
 #define MAX_CONNECTIONS 10
@@ -32,6 +33,28 @@ struct request {
     void * body;
 };
 
+void free_http_header(HttpHeader * header) {
+    if(header == NULL) return;
+    if(header->name != NULL) free(header->name);
+    if(header->value != NULL) free(header->value);
+    free(header);
+}
+
+void free_http_request(HttpRequest * request) {
+    if(request == NULL) return;
+    if(request->method != NULL) free(request->method);
+    if(request->uri != NULL) free(request->uri);
+    HttpHeader * header = request->headers;
+    HttpHeader * previous = header;
+    while(previous != NULL) {
+        header = header->next;
+        free_http_header(previous);
+        previous = header;
+    }
+    if(request->body != NULL) free(request->body);
+    free(request);
+}
+
 HttpRequest * parse_http_request(char * message, int * status) {
 
     // Set default parsing status to successful
@@ -44,61 +67,110 @@ HttpRequest * parse_http_request(char * message, int * status) {
     request->headers = NULL;
     request->body = NULL;
 
-    // Parsing the http request method
     char * to_tokenize = strdup(message);
-    char * piece = strtok(to_tokenize, " \t\n");
-    if(piece != NULL) {
-        char * method = strdup(piece);
 
-        // List of valid http request methods:
-        // https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html
-        // Ensure the provided method is a valid method
+    // 1. Parsing the http request method
+    // The "piece" should never freed because it points to the original buffer
+    char * piece = strtok(to_tokenize, " \t\n");
+    if(piece == NULL) {
+        // Set invalid format status code because no http method was found in the request
+        (* status) = 1;
+        // Free the allocated resources
+        free_http_request(request);
+        free(to_tokenize);
+        return NULL;
+    }
+
+    char * method = strdup(piece);
+    if(method != NULL) {
+        /*
+         * Ensure the parsed method is a valid http rfc2616 method.
+         * @see https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html
+         */
         bool is_valid_method =
-              strcmp(method, "GET") == 0
-           || strcmp(method, "POST") == 0
-           || strcmp(method, "DELETE") == 0
-           || strcmp(method, "PUT") == 0
-           || strcmp(method, "OPTIONS") == 0
-           || strcmp(method, "HEAD") == 0
-           || strcmp(method, "TRACE") == 0
-           || strcmp(method, "CONNECT") == 0;
+                strcmp(method, "GET") == 0
+                || strcmp(method, "POST") == 0
+                || strcmp(method, "DELETE") == 0
+                || strcmp(method, "PUT") == 0
+                || strcmp(method, "OPTIONS") == 0
+                || strcmp(method, "HEAD") == 0
+                || strcmp(method, "TRACE") == 0
+                || strcmp(method, "CONNECT") == 0;
 
         if(!is_valid_method) {
+            // Set invalid format status code because no valid http method was found in the request
             (* status) = 2;
-            // TODO: Free half-build http request structure and return null
+            // Free the allocated resources
+            free_http_request(request);
+            free(method);
+            free(to_tokenize);
+            return NULL;
         }
-
-        if(method != NULL) {
-            request->method = method;
-        } else {
-            (* status) = 1;
-            // TODO: Free half-build http request structure and return null
-        }
+        request->method = method;
+    } else {
+        // Set invalid format status code because no memory was available for allocation
+        (* status) = 3;
+        // Free the allocated resources
+        free_http_request(request);
+        free(to_tokenize);
+        return NULL;
     }
 
-    // Parsing the http request URI
+    // 2. Parsing the http request URI
+    // The "piece" should never freed because it points to the original buffer
     piece = strtok(NULL, " \t");
-    if(piece != NULL) {
-        char * uri = strdup(piece);
-        if(uri != NULL) {
-            request->uri = uri;
-        } else {
-            (* status) = 1;
-            // TODO: Free half-build http request structure and return null
-        }
+    if(piece == NULL) {
+        // Set invalid format status code because no http uri was found in the request
+        (* status) = 4;
+        // Free the allocated resources
+        free_http_request(request);
+        free(to_tokenize);
+        return NULL;
     }
 
-    // Parsing the http request protocol version
-    piece = strtok(NULL, " \t\n");
-    if(piece != NULL) {
-        char * version = strdup(piece);
-        if(version != NULL) {
-            request->version = version;
-        } else {
-            (* status) = 1;
-            // TODO: Free half-build http request structure and return null
-        }
+    char * uri = strdup(piece);
+    if(uri != NULL) {
+
+        // TODO: Implement URI validation algorithm
+
+        request->uri = uri;
+    } else {
+        // Set invalid format status code because no memory was available for allocation
+        (* status) = 3;
+        // Free the allocated resources
+        free_http_request(request);
+        free(to_tokenize);
+        return NULL;
     }
+
+    // 3. Parsing the http request protocol version
+    // The "piece" should never freed because it points to the original buffer
+    piece = strtok(NULL, " \t\n");
+    if(piece == NULL) {
+        // Set invalid format status code because no http protocol version was found in the request
+        (* status) = 5;
+        // Free the allocated resources
+        free_http_request(request);
+        free(to_tokenize);
+        return NULL;
+    }
+
+    char * version = strdup(piece);
+    if(version != NULL) {
+
+        // TODO: Implement http protocol version validation algorithm
+
+        request->version = version;
+    } else {
+        // Set invalid format status code because no memory was available for allocation
+        (* status) = 3;
+        // Free the allocated resources
+        free_http_request(request);
+        free(to_tokenize);
+        return NULL;
+    }
+
+    free(to_tokenize);
 
     return request;
 }
@@ -127,9 +199,9 @@ sem_t lock;
 
 void handle_html(int socket, char * file_path) {
 
-    static const char STATUS_OK[] = "HTTP/1.0 200 OK\r\n"
+    static const char STATUS_OK[] = "HTTP/1.1 200 OK\r\n"
                                     "Content-Type: text/html\r\n\r\n";
-    static const char STATUS_NOT_FOUND[] = "HTTP/1.0 404 Not Found\r\n"
+    static const char STATUS_NOT_FOUND[] = "HTTP/1.1 404 Not Found\r\n"
                                            "Connection: close\r\n\r\n";
 
     FILE * file = fopen(file_path, "r");
@@ -165,9 +237,9 @@ void handle_html(int socket, char * file_path) {
 
 void handle_js(int socket, char * file_path) {
 
-    static const char STATUS_OK[] = "HTTP/1.0 200 OK\r\n"
+    static const char STATUS_OK[] = "HTTP/1.1 200 OK\r\n"
                                     "Content-Type: application/javascript\r\n\r\n";
-    static const char STATUS_NOT_FOUND[] = "HTTP/1.0 404 Not Found\r\n"
+    static const char STATUS_NOT_FOUND[] = "HTTP/1.1 404 Not Found\r\n"
                                            "Connection: close\r\n\r\n";
 
     FILE * file = fopen(file_path, "r");
@@ -203,9 +275,9 @@ void handle_js(int socket, char * file_path) {
 
 void handle_css(int socket, char * file_path) {
 
-    static const char STATUS_OK[] = "HTTP/1.0 200 OK\r\n"
+    static const char STATUS_OK[] = "HTTP/1.1 200 OK\r\n"
                                     "Content-Type: text/css\r\n\r\n";
-    static const char STATUS_NOT_FOUND[] = "HTTP/1.0 404 Not Found\r\n"
+    static const char STATUS_NOT_FOUND[] = "HTTP/1.1 404 Not Found\r\n"
                                            "Connection: close\r\n\r\n";
 
     FILE * file = fopen(file_path, "r");
@@ -242,9 +314,9 @@ void handle_css(int socket, char * file_path) {
 void handle_jpeg(int socket, char * file_path) {
 
     // Available response statuses
-    static const char STATUS_OK[] = "HTTP/1.0 200 OK\r\n"
+    static const char STATUS_OK[] = "HTTP/1.1 200 OK\r\n"
                                     "Content-Type: image/jpeg\r\n\r\n";
-    static const char STATUS_NOT_FOUND[] = "HTTP/1.0 404 Not Found\r\n"
+    static const char STATUS_NOT_FOUND[] = "HTTP/1.1 404 Not Found\r\n"
                                            "Connection: close\r\n\r\n";
 
     // Try to open and send the requested binary file
@@ -270,9 +342,9 @@ void handle_jpeg(int socket, char * file_path) {
 void handle_svg(int socket, char * file_path) {
 
     // Available response statuses
-    static const char STATUS_OK[] = "HTTP/1.0 200 OK\r\n"
+    static const char STATUS_OK[] = "HTTP/1.1 200 OK\r\n"
                                     "Content-Type: image/svg+xml\r\n\r\n";
-    static const char STATUS_NOT_FOUND[] = "HTTP/1.0 404 Not Found\r\n"
+    static const char STATUS_NOT_FOUND[] = "HTTP/1.1 404 Not Found\r\n"
                                            "Connection: close\r\n\r\n";
 
     // Try to open and send the requested binary file
@@ -304,7 +376,7 @@ void *handle_request(void * socket) {
 
     // If we run out of available connections reject connection
     if(current_connections + 1 > MAX_CONNECTIONS) {
-        static const char STATUS_UNAVAILABLE[] = "HTTP/1.0 503 Service Unavailable\r\n"
+        static const char STATUS_UNAVAILABLE[] = "HTTP/1.1 503 Service Unavailable\r\n"
                                                  "Content-Type: text/html\r\n\r\n"
                                                  "<!doctype html><html><body>Server is busy.</body></html>";
         // Send response
@@ -338,8 +410,17 @@ void *handle_request(void * socket) {
         char * parsed_request[3];
         // printf("%s", client_message);
 
-        int status;
-        parse_http_request(client_message, &status);
+        int parse_status;
+
+        HttpRequest * httpRequest = parse_http_request(client_message, &parse_status);
+
+        printf("1. Parse parse_status: %d\n", parse_status);
+        if(parse_status == 0) {
+            printf("2. Request method: %s\n", httpRequest->method);
+            printf("3. URI: %s\n", httpRequest->uri);
+            printf("4. Http Version: %s\n", httpRequest->version);
+        }
+        fflush(stdout);
 
         parsed_request[0] = strtok(client_message, " \t\n");
         // Only accept GET method
@@ -350,8 +431,8 @@ void *handle_request(void * socket) {
             parsed_request[2] = strtok(NULL, " \t\n");
 
             // Ensure http protocol version is 1.0 or 1.1
-            if (strncmp(parsed_request[2], "HTTP/1.0", 8) != 0 && strncmp(parsed_request[2], "HTTP/1.1", 8) != 0) {
-                static const char STATUS_BAD_REQUEST[] = "HTTP/1.0 400 Bad Request\r\n"
+            if (strncmp(parsed_request[2], "HTTP/1.1", 8) != 0) {
+                static const char STATUS_BAD_REQUEST[] = "HTTP/1.1 400 Bad Request\r\n"
                                                          "Connection: close\r\n\r\n";
                 write(socket_descriptor, STATUS_BAD_REQUEST, strlen(STATUS_BAD_REQUEST));
             }
@@ -378,15 +459,15 @@ void *handle_request(void * socket) {
                 }
                 // If no path was provided or just "/"
                 else if (tokens[0] == NULL || tokens[1] == NULL) {
-                    static const char STATUS_BAD_REQUEST[] = "HTTP/1.0 400 Bad Request\r\n"
+                    static const char STATUS_BAD_REQUEST[] = "HTTP/1.1 400 Bad Request\r\n"
                                                              "Connection: close\r\n\r\n";
                     write(socket_descriptor, STATUS_BAD_REQUEST, strlen(STATUS_BAD_REQUEST));
                 } else {
-                    // If the requested file is not html, js or jpeg, send bad request response status
+                    // If the requested file is not html, js or jpeg, send bad request response parse_status
                     if (strcmp(tokens[1], "html") != 0 && strcmp(tokens[1], "css") != 0
                         && strcmp(tokens[1], "js") != 0 && strcmp(tokens[1], "jpeg") != 0
                         && strcmp(tokens[1], "svg") != 0) {
-                        static const char STATUS_BAD_REQUEST[] = "HTTP/1.0 400 Bad Request\r\n"
+                        static const char STATUS_BAD_REQUEST[] = "HTTP/1.1 400 Bad Request\r\n"
                                                                  "Connection: close\r\n\r\n";
                         write(socket_descriptor, STATUS_BAD_REQUEST, strlen(STATUS_BAD_REQUEST));
                     }
