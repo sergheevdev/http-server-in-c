@@ -35,7 +35,7 @@ HttpRequest * parse_http_request(char * message) {
 
     static const char NO_MEMORY_MSG[] = "[Simple HTTP Server] "
                                         "Http Request Parsing Error: "
-                                        "no enough memory to allocate parsed piece to request\n";
+                                        "no enough memory to allocate parsed piece for request\n";
 
     HttpRequest * request = malloc(sizeof(HttpRequest));
     request->method = NULL;
