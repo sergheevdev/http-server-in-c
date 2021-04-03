@@ -33,7 +33,9 @@ struct request {
 
 HttpRequest * parse_http_request(char * message) {
 
-    static const char NO_MEMORY_MSG[] = "Http Request Parsing Error: no enough memory to allocate piece\n";
+    static const char NO_MEMORY_MSG[] = "[Simple HTTP Server] "
+                                        "Http Request Parsing Error: "
+                                        "no enough memory to allocate parsed piece to request\n";
 
     HttpRequest * request = malloc(sizeof(HttpRequest));
     request->method = NULL;
@@ -64,7 +66,7 @@ HttpRequest * parse_http_request(char * message) {
         }
     }
 
-    // Parsing the http request version
+    // Parsing the http request protocol version
     piece = strtok(NULL, " \t\n");
     if(piece != NULL) {
         char * version = strdup(piece);
