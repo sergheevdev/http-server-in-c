@@ -9,7 +9,7 @@
 ### Warning
 - The web server was implemented just for fun in a few hours, not intendeed to be a really efficient web server.
 - This implementation has memory leaks and is currently a work in progress.
-- The design is the worst thing I've ever seen in my life, whenever I have free time I will apply SOLID and create ADT's.
+- The design is the worst thing I've ever seen in my life, whenever I have free time I will apply refactorings and create ADT's.
 
 ### Story
 
