@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -31,12 +32,12 @@ struct request {
     void * body;
 };
 
-HttpRequest * parse_http_request(char * message) {
+HttpRequest * parse_http_request(char * message, int * status) {
 
-    static const char NO_MEMORY_MSG[] = "[Simple HTTP Server] "
-                                        "Http Request Parsing Error: "
-                                        "no enough memory to allocate parsed piece for request\n";
+    // Set default parsing status to successful
+    (* status) = 0;
 
+    // Allocate the memory for the http request structure
     HttpRequest * request = malloc(sizeof(HttpRequest));
     request->method = NULL;
     request->uri = NULL;
@@ -48,10 +49,30 @@ HttpRequest * parse_http_request(char * message) {
     char * piece = strtok(to_tokenize, " \t\n");
     if(piece != NULL) {
         char * method = strdup(piece);
+
+        // List of valid http request methods:
+        // https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html
+        // Ensure the provided method is a valid method
+        bool is_valid_method =
+              strcmp(method, "GET") == 0
+           || strcmp(method, "POST") == 0
+           || strcmp(method, "DELETE") == 0
+           || strcmp(method, "PUT") == 0
+           || strcmp(method, "OPTIONS") == 0
+           || strcmp(method, "HEAD") == 0
+           || strcmp(method, "TRACE") == 0
+           || strcmp(method, "CONNECT") == 0;
+
+        if(!is_valid_method) {
+            (* status) = 2;
+            // TODO: Free half-build http request structure and return null
+        }
+
         if(method != NULL) {
             request->method = method;
         } else {
-            fprintf(stderr, NO_MEMORY_MSG);
+            (* status) = 1;
+            // TODO: Free half-build http request structure and return null
         }
     }
 
@@ -62,7 +83,8 @@ HttpRequest * parse_http_request(char * message) {
         if(uri != NULL) {
             request->uri = uri;
         } else {
-            fprintf(stderr, NO_MEMORY_MSG);
+            (* status) = 1;
+            // TODO: Free half-build http request structure and return null
         }
     }
 
@@ -73,7 +95,8 @@ HttpRequest * parse_http_request(char * message) {
         if(version != NULL) {
             request->version = version;
         } else {
-            fprintf(stderr, NO_MEMORY_MSG);
+            (* status) = 1;
+            // TODO: Free half-build http request structure and return null
         }
     }
 
