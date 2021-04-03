@@ -1,4 +1,4 @@
-# :bus: Simple HTTP Server in C
+# :computer: Simple HTTP Server in C
 
 [![MIT License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](https://github.com/sergheevdev/http-server-in-c/blob/main/LICENSE)
 
