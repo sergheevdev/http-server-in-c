@@ -41,35 +41,35 @@ HttpRequest * parse_http_request(char * message) {
     request->headers = NULL;
     request->body = NULL;
 
-    // Parsing the request method
+    // Parsing the http request method
     char * to_tokenize = strdup(message);
     char * piece = strtok(to_tokenize, " \t\n");
     if(piece != NULL) {
-        char * to_store = strdup(piece);
-        if(to_store != NULL) {
-            request->method = to_store;
+        char * method = strdup(piece);
+        if(method != NULL) {
+            request->method = method;
         } else {
             fprintf(stderr, NO_MEMORY_MSG);
         }
     }
 
-    // Parsing the uri of the requested object
+    // Parsing the http request URI
     piece = strtok(NULL, " \t");
     if(piece != NULL) {
-        char * to_store = strdup(piece);
-        if(to_store != NULL) {
-            request->uri = to_store;
+        char * uri = strdup(piece);
+        if(uri != NULL) {
+            request->uri = uri;
         } else {
             fprintf(stderr, NO_MEMORY_MSG);
         }
     }
 
-    // Parsing the used http version
+    // Parsing the http request version
     piece = strtok(NULL, " \t\n");
     if(piece != NULL) {
-        char * to_store = strdup(piece);
-        if(to_store != NULL) {
-            request->version = to_store;
+        char * version = strdup(piece);
+        if(version != NULL) {
+            request->version = version;
         } else {
             fprintf(stderr, NO_MEMORY_MSG);
         }
