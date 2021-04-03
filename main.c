@@ -13,6 +13,72 @@
 #define BUFFER_SIZE 4096
 #define MAX_CONNECTIONS 10
 
+typedef enum method HttpMethod;
+typedef struct header HttpHeader;
+typedef struct request HttpRequest;
+
+struct header {
+    char * name;
+    char * value;
+    struct header * next;
+};
+
+struct request {
+    char * method;
+    char * uri;
+    char * version;
+    struct header * headers;
+    void * body;
+};
+
+HttpRequest * parse_http_request(char * message) {
+
+    static const char NO_MEMORY_MSG[] = "Http Request Parsing Error: no enough memory to allocate piece\n";
+
+    HttpRequest * request = malloc(sizeof(HttpRequest));
+    request->method = NULL;
+    request->uri = NULL;
+    request->headers = NULL;
+    request->body = NULL;
+
+    // Parsing the request method
+    char * to_tokenize = strdup(message);
+    char * piece = strtok(to_tokenize, " \t\n");
+    if(piece != NULL) {
+        char * to_store = strdup(piece);
+        if(to_store != NULL) {
+            request->method = to_store;
+        } else {
+            fprintf(stderr, NO_MEMORY_MSG);
+        }
+    }
+
+    // Parsing the uri of the requested object
+    piece = strtok(NULL, " \t");
+    if(piece != NULL) {
+        char * to_store = strdup(piece);
+        if(to_store != NULL) {
+            request->uri = to_store;
+        } else {
+            fprintf(stderr, NO_MEMORY_MSG);
+        }
+    }
+
+    // Parsing the used http version
+    piece = strtok(NULL, " \t\n");
+    if(piece != NULL) {
+        char * to_store = strdup(piece);
+        if(to_store != NULL) {
+            request->version = to_store;
+        } else {
+            fprintf(stderr, NO_MEMORY_MSG);
+        }
+    }
+
+    return request;
+}
+
+
 // Keeps track of the current number of connections
 int current_connections = 0;
 
@@ -20,9 +86,6 @@ int current_connections = 0;
 sem_t lock;
 
 /*
- * This web server was implemented just for fun, if I decide to continue with
- * its development I will try to apply the following metioned refactorings.
- *
  * REFERENCES:
  * - https://tools.ietf.org/html/rfc2616
  * - https://stackoverflow.com/questions/176409/build-a-simple-http-server-in-c
@@ -249,8 +312,10 @@ void *handle_request(void * socket) {
         // position 2 -> protocol version
         char * parsed_request[3];
         // printf("%s", client_message);
-        parsed_request[0] = strtok(client_message, " \t\n");
 
+        parse_http_request(client_message);
+
+        parsed_request[0] = strtok(client_message, " \t\n");
         // Only accept GET method
         if (strncmp(parsed_request[0], "GET\0", 4) == 0) {
 
