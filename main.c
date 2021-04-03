@@ -102,8 +102,8 @@ HttpRequest * parse_http_request(char * message, int * status) {
             (* status) = 2;
             // Free the allocated resources
             free_http_request(request);
-            free(method);
             free(to_tokenize);
+            free(method);
             return NULL;
         }
         request->method = method;
