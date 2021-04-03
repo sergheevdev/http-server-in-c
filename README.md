@@ -4,13 +4,12 @@
 
 ## Introduction
 
-**Simple HTTP Server**: is a simple HTTP server implementation in C. The server can respond
-GET requests with static folder specified resources.
+**Simple HTTP Server**: is a simple HTTP server implementation in C using [RFC2616](https://tools.ietf.org/html/rfc2616).
 
 ### Warning
-- This implementation has memory leaks and is currently a work in progress, but it works.
-- I'm implementing this just for fun, not intendeed to be a really efficient web server.
-- I won't provide any support until a stable version has been released.
+- The web server was implemented just for fun in a few hours, not intendeed to be a really efficient web server.
+- This implementation has memory leaks and is currently a work in progress.
+- The design is the worst thing I've ever seen in my life, whenever I have free time I will apply SOLID and create ADT's.
 
 ### Story
 
