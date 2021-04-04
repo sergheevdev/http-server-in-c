@@ -11,14 +11,37 @@
 #include <semaphore.h>
 #include <ctype.h>
 
-//#define PUBLIC_FOLDER "/home/server/public"
-#define PUBLIC_FOLDER "/home/sscid/sources"
+/**
+ * A simple HTTP server implementation in C using RFC2616 (https://tools.ietf.org/html/rfc2616).
+ *
+ * <B>FEATURES</B>:
+ * - Static resources serving (capable of serving static file resources like html, css, js, jpeg and svg files).
+ * - Multi-threaded handling of requests.
+ *
+ * <B>TO-DO</B>:
+ * - Fix memory leaks (with valgrind) and ensure all dynamic memory is deallocated when unnecesary.
+ * - Fix multithreading issues to allow multiple threads to perform I/O at the same time.
+ *   (https://docs.oracle.com/cd/E19455-01/806-5257/6je9h033b/index.html)
+ *   "When multiple threads are performing I/O operations at the same time with the same file
+ *   descriptor, you might discover that the traditional UNIX I/O interface is not thread safe."
+ * - Add operative system default MIME file loading in cache or fallback to this software defaults.
+ * - Improve the design and create separate files for responsibilities.
+ * - Add custom handlers that could be loaded to a manager to perform custom route handling (like low level controllers).
+ * - Improve the structures, like header storage by using a hashmap to allow O(1) time complexity for header lookup
+ *   by the given header name.
+ * - Abstract away and use a string library.
+ *
+ * And a lot of more stuff which will probably get refactored whenever I feel like I wanting to suffer :D
+ */
+
+#define PUBLIC_FOLDER "/home/server/public"
 #define PORT_NUMBER 8080
 #define BUFFER_SIZE 4096
-#define MAX_CONNECTIONS 10
+#define MAX_CONNECTIONS 20
 
 typedef struct header HttpHeader;
 typedef struct request HttpRequest;
+typedef struct mime HttpMimeType;
 
 struct header {
     char * name;
@@ -34,28 +57,31 @@ struct request {
     char * body;
 };
 
-void free_http_header(HttpHeader * header) {
-    if(header == NULL) return;
-    if(header->name != NULL) free(header->name);
-    if(header->value != NULL) free(header->value);
-    free(header);
-}
+struct mime {
+    char * extension;
+    char * mime;
+    bool binary;
+};
 
-void free_http_request(HttpRequest * request) {
-    if(request == NULL) return;
-    if(request->method != NULL) free(request->method);
-    if(request->uri != NULL) free(request->uri);
-    HttpHeader * header = request->headers;
-    HttpHeader * previous = header;
-    while(previous != NULL) {
-        header = header->next;
-        free_http_header(previous);
-        previous = header;
-    }
-    if(request->body != NULL) free(request->body);
-    free(request);
-}
 
+// GLOBAL VARIABLES
+
+// Keeps track of the current number of connections
+int current_connections = 0;
+
+// Controls threading actions (i.e. no multiple threads accesing disk)
+sem_t lock;
+
+
+/**
+ * Returns a pointer to a new allocated <B>HttpHeader</B> structure, with
+ * all its fields initialized to <I>NULL</I>.
+ *
+ * The returned structure and its contents should be freed by the client.
+ *
+ * @return a pointer to a new allocated <B>HttpHeader</B> structure, or
+ *         <I>NULL</I> if there is no enough space for allocation
+ */
 HttpHeader * create_http_header() {
     HttpHeader * header = malloc(sizeof(HttpHeader));
     if(header == NULL) {
@@ -68,6 +94,29 @@ HttpHeader * create_http_header() {
     return header;
 }
 
+/**
+ * Frees the given <B>HttpHeader</B> structure and its contents. If the given
+ * header or any of its fields is <I>NULL</I>, no freeing is performed and
+ * that variable is just ignored.
+ *
+ * @param header a pointer to a <B>HttpHeader</B>
+ */
+void free_http_header(HttpHeader * header) {
+    if(header == NULL) return;
+    if(header->name != NULL) free(header->name);
+    if(header->value != NULL) free(header->value);
+    free(header);
+}
+
+/**
+ * Returns a pointer to a new allocated <B>HttpRequest</B> structure, with
+ * all its fields initialized to <I>NULL</I>.
+ *
+ * The returned structure and its contents should be freed by the client.
+ *
+ * @return a pointer to a new allocated <B>HttpRequest</B> structure, or
+ *         <I>NULL</I> if there is no enough space for allocation
+ */
 HttpRequest * create_http_request() {
     HttpRequest * request = malloc(sizeof(HttpRequest));
     if(request == NULL) {
@@ -82,19 +131,63 @@ HttpRequest * create_http_request() {
     return request;
 }
 
+/**
+ * Frees the given <B>HttpRequest</B> structure and its contents. If
+ * the given header or any of its fields is <I>NULL</I>, no freeing
+ * is performed and that variable is just ignored.
+ *
+ * @param request a pointer to a <B>HttpRequest</B>
+ */
+void free_http_request(HttpRequest * request) {
+    if(request == NULL) return;
+    if(request->method != NULL) free(request->method);
+    if(request->uri != NULL) free(request->uri);
+    if(request->body != NULL) free(request->body);
+    // Free the linked list of headers
+    HttpHeader * header = request->headers;
+    HttpHeader * previous = header;
+    while(header != NULL) {
+        header = header->next;
+        free_http_header(previous);
+        previous = header;
+    }
+    free_http_header(previous);
+    free(request);
+}
+
+/**
+ * Attempts to parse the given message into a http request, performing
+ * the necessary validations and checks.
+ *
+ * The returned structure and its contents should be freed by the client.
+ *
+ * @param message an http message to be parsed
+ * @param status the result status code of the parsing
+ *
+ * @return a new allocated pointer with the parsed <B>HttpRequest</B>
+ *         or <I>NULL</I> if there is no enough space for allocation,
+ *         or the validation or parsing failed
+ */
 HttpRequest * parse_http_request(char * message, int * status) {
 
-    static const int SUCCESS_CODE = 0;            // If no parsing or validation errors ocurred (i.e. successful parsing :D)
-    static const int NO_MEMORY_CODE = 1;          // If there was no memory for some allocation (i.e. any allocation performed during parsing)
-    static const int INVALID_FORMAT_CODE = 2;     // If the parsed request does not follow rfc2616 http request format (i.e. some piece like request method not present)
-    static const int VALIDATION_FAILED_CODE = 3;  // If the provided input was not successfully validated (i.e. provided unexistent http method)
+    // If the parsing and validation passsed successfully
+    static const int SUCCESS_CODE = 0;
+
+    // If there was no memory for some allocation (i.e. could not allocate memory for request body, or request method, etc)
+    static const int NO_MEMORY_CODE = 1;
+
+    // If the parsed request does not follow rfc2616 http request format (i.e. some piece like request method is missing)
+    static const int INVALID_FORMAT_CODE = 2;
+
+    // If any of the values provided in the request was not successfully validated (i.e. invalid http method like "HELLO")
+    static const int VALIDATION_FAILED_CODE = 3;
 
     if(message == NULL) {
         (* status) = INVALID_FORMAT_CODE;
         return NULL;
     }
 
-    // Set default return code to: successful
+    // Set default return code to successful
     (* status) = SUCCESS_CODE;
 
     HttpRequest * http_request = create_http_request();
@@ -130,14 +223,15 @@ HttpRequest * parse_http_request(char * message, int * status) {
     }
 
     // ### 1.3 Ensure the length of the http method is valid ###
-    // Shortest method length = 3 and longest method length = 7
     int size = 0;
     char * traversal = method;
     while((* traversal) != '\0' && size <= 7) {
         size++;
         traversal++;
     }
-    // If size exceeds longest valid method name size given input is invalid
+    // Shortest method length = 3 and longest method length = 7, so if the
+    // size exceeds longest valid method name size, or is smaller than the
+    // shortest method length given input is invalid.
     if(size < 3 || size > 7) {
         (* status) = VALIDATION_FAILED_CODE;
         free_http_request(http_request);
@@ -146,7 +240,7 @@ HttpRequest * parse_http_request(char * message, int * status) {
         return NULL;
     }
 
-    // @see https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html
+    // RFC2616 request methods: https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html
     bool is_valid_method =
             strcmp(method, "GET") == 0
             || strcmp(method, "POST") == 0
@@ -157,7 +251,7 @@ HttpRequest * parse_http_request(char * message, int * status) {
             || strcmp(method, "TRACE") == 0
             || strcmp(method, "CONNECT") == 0;
 
-    // ### 1.4 Ensure http method is a valid defined method in rfc2616 ###
+    // ### 1.4 Ensure http method is a valid defined method in RFC2616 ###
     if(is_valid_method == false) {
         (* status) = VALIDATION_FAILED_CODE;
         free_http_request(http_request);
@@ -172,7 +266,7 @@ HttpRequest * parse_http_request(char * message, int * status) {
 
     piece = strtok_r(NULL, " \t", &message_context);
 
-    // ### 2.1 Check http uri is present  ###
+    // ### 2.1 Check http uri is present ###
     if(piece == NULL) {
         (* status) = INVALID_FORMAT_CODE;
         free_http_request(http_request);
@@ -192,7 +286,7 @@ HttpRequest * parse_http_request(char * message, int * status) {
 
     // Basic domain and security validations are performed, for security hardening add extra layer of validation
     // @see https://stackoverflow.com/questions/4669692/valid-characters-for-directory-part-of-a-url-for-short-links
-    // Valid chars: a-z A-Z 0-9 . - _ ~ ! $ & ' ( ) * + , ; = : @ % /
+    // Valid characters for the uri/path: "a-z A-Z 0-9 . - _ ~ ! $ & ' ( ) * + , ; = : @ % /"
     traversal = uri;
     bool is_valid_uri = true;
     char previous_char = '\0';
@@ -338,9 +432,9 @@ HttpRequest * parse_http_request(char * message, int * status) {
         bool is_header_name_valid = true;
         while((* traversal) != '\0' && is_header_name_valid) {
             is_header_name_valid =
-                   ((* traversal) >= 'a' && (* traversal) <= 'z')  // Is lowecase letter
-                || ((* traversal) >= 'A' && (* traversal) <= 'Z')  // Is uppercase letter
-                || ((* traversal) == '-');                         // Standard word separator
+                    ((* traversal) >= 'a' && (* traversal) <= 'z')     // Is lowecase letter
+                    || ((* traversal) >= 'A' && (* traversal) <= 'Z')  // Is uppercase letter
+                    || ((* traversal) == '-');                         // Standard word separator
             traversal++;
         }
 
@@ -427,199 +521,239 @@ HttpRequest * parse_http_request(char * message, int * status) {
     return http_request;
 }
 
-
-// Keeps track of the current number of connections
-int current_connections = 0;
-
-// Controls threading actions (i.e. no multiple threads accesing disk, concurrent connections amount modification)
-sem_t lock;
-
-/*
- * REFERENCES:
- * - https://tools.ietf.org/html/rfc2616
- * - https://stackoverflow.com/questions/176409/build-a-simple-http-server-in-c
- * - https://en.wikipedia.org/wiki/Berkeley_sockets
- * TO-DO:
- * - Abstract away "handle_x" (image handlers) to a generic binary file reader
- * - Abstract away "handle_y" (plain text handlers) to a generic text file reader (and not read entire html file to a buffer but send by pieces)
- * - Create request parser, request structure (headers, method, etc) and builder (to prevent manual tokenization -> leaky abstractions)
- * - Create response parser, response structure (response status, content type, etc) and builder (to prevent hardcoded responses)
- * - Allow to add custom request path handlers (like low level controllers, so we could associate a path with a concrete handler)
- * - Use best error handling practices
- * - Test with valgrind to prevent memory leaks
+/**
+ * Returns a pointer to a new allocated <B>HttpMimeType</B> structure, with
+ * all its fields initialized to <I>NULL</I> or its default values.
+ *
+ * The returned structure and its contents should be freed by the client.
+ *
+ * @return a pointer to a new allocated <B>HttpMimeType</B> structure, or
+ *         <I>NULL</I> if there is no enough space for allocation
  */
-
-void handle_html(int socket, char * file_path) {
-
-    static const char STATUS_OK[] = "HTTP/1.1 200 OK\r\n"
-                                    "Content-Type: text/html\r\n\r\n";
-    static const char STATUS_NOT_FOUND[] = "HTTP/1.1 404 Not Found\r\n"
-                                           "Connection: close\r\n\r\n";
-
-    FILE * file = fopen(file_path, "r");
-    if (file != NULL) {
-        printf("[Logger] requested html file was found: %s\n", file_path);
-        // Find out the file size
-        fseek(file, 0, SEEK_END);
-        long bytes_size = ftell(file);
-        fseek(file, 0, SEEK_SET);
-
-        // Send successful response header
-        send(socket, STATUS_OK, strlen(STATUS_OK), 0);
-        char * buffer = malloc(bytes_size * sizeof(char));
-
-        // Read the html file straight to the buffer
-        fread(buffer, bytes_size, 1, file);
-
-        // Transmit the buffer directly to the client
-        write (socket, buffer, bytes_size);
-        free(buffer);
-
-        fclose(file);
-        printf("[Logger] requested html file was transmitted: %s\n", file_path);
+HttpMimeType * create_http_mime_type() {
+    HttpMimeType * mime_type = malloc(sizeof(HttpMimeType));
+    if(mime_type == NULL) {
+        fprintf(stderr, "Failed to allocate memory for http mime type: %s\n", strerror(errno));
+        fflush(stderr);
+        return NULL;
     }
-    else {
-        printf("[Logger] requested html file was not found: %s\n", file_path);
-        // If the file does not exist
-        write(socket, STATUS_NOT_FOUND, strlen(STATUS_NOT_FOUND));
-    }
-
-    fflush(stdout);
+    mime_type->extension = NULL;
+    mime_type->mime = NULL;
+    mime_type->binary = false;
+    return mime_type;
 }
 
-void handle_js(int socket, char * file_path) {
-
-    static const char STATUS_OK[] = "HTTP/1.1 200 OK\r\n"
-                                    "Content-Type: application/javascript\r\n\r\n";
-    static const char STATUS_NOT_FOUND[] = "HTTP/1.1 404 Not Found\r\n"
-                                           "Connection: close\r\n\r\n";
-
-    FILE * file = fopen(file_path, "r");
-    if (file != NULL) {
-        printf("[Logger] requested js file was found: %s\n", file_path);
-        // Find out the file size
-        fseek(file, 0, SEEK_END);
-        long bytes_size = ftell(file);
-        fseek(file, 0, SEEK_SET);
-
-        // Send successful response header
-        send(socket, STATUS_OK, strlen(STATUS_OK), 0);
-        char * buffer = malloc(bytes_size * sizeof(char));
-
-        // Read the html file straight to the buffer
-        fread(buffer, bytes_size, 1, file);
-
-        // Transmit the buffer directly to the client
-        write (socket, buffer, bytes_size);
-        free(buffer);
-
-        fclose(file);
-        printf("[Logger] requested js file was transmitted: %s\n", file_path);
-    }
-    else {
-        printf("[Logger] requested js file was not found: %s\n", file_path);
-        // If the file does not exist
-        write(socket, STATUS_NOT_FOUND, strlen(STATUS_NOT_FOUND));
-    }
-
-    fflush(stdout);
+/**
+ * Frees the given <B>HttpMimeType</B> structure and its contents. If
+ * the given mime type or any of its fields is <I>NULL</I>, no freeing
+ * is performed and that variable is just ignored.
+ *
+ * @param mime_type a pointer to a <B>HttpMimeType</B>
+ */
+void free_http_mime_type(HttpMimeType * mime_type) {
+    if(mime_type == NULL) return;
+    if(mime_type->extension != NULL) free(mime_type->extension);
+    if(mime_type->mime != NULL) free(mime_type->mime);
+    free(mime_type);
 }
 
-void handle_css(int socket, char * file_path) {
-
-    static const char STATUS_OK[] = "HTTP/1.1 200 OK\r\n"
-                                    "Content-Type: text/css\r\n\r\n";
-    static const char STATUS_NOT_FOUND[] = "HTTP/1.1 404 Not Found\r\n"
-                                           "Connection: close\r\n\r\n";
-
-    FILE * file = fopen(file_path, "r");
-    if (file != NULL) {
-        printf("[Logger] requested css file was found: %s\n", file_path);
-        // Find out the file size
-        fseek(file, 0, SEEK_END);
-        long bytes_size = ftell(file);
-        fseek(file, 0, SEEK_SET);
-
-        // Send successful response header
-        send(socket, STATUS_OK, strlen(STATUS_OK), 0);
-        char * buffer = malloc(bytes_size * sizeof(char));
-
-        // Read the html file straight to the buffer
-        fread(buffer, bytes_size, 1, file);
-
-        // Transmit the buffer directly to the client
-        write (socket, buffer, bytes_size);
-        free(buffer);
-
-        fclose(file);
-        printf("[Logger] requested css file was transmitted: %s\n", file_path);
+/**
+ * Returns a pointer to a new allocated <B>HttpMimeType</B> structure,
+ * with all the MIME type information of a given extension.
+ *
+ * The returned structure and its contents should be freed by the client.
+ *
+ * @return a pointer to a new allocated <B>HttpMimeType</B> structure,
+ *         or <I>NULL</I> if there is no enough space for allocation,
+ *         or there is no registered mime for that file extension
+ */
+HttpMimeType * from_extension_mime_type(char * extension) {
+    if(strcmp("html", extension) == 0) {
+        HttpMimeType * mime_type = create_http_mime_type();
+        if(mime_type == NULL) return NULL;
+        mime_type->extension = strdup(extension);
+        mime_type->mime = strdup("text/html");
+        mime_type->binary = false;
+        return mime_type;
     }
-    else {
-        printf("[Logger] requested css file was not found: %s\n", file_path);
-        // If the file does not exist
-        write(socket, STATUS_NOT_FOUND, strlen(STATUS_NOT_FOUND));
+    else if(strcmp("css", extension) == 0) {
+        HttpMimeType * mime_type = create_http_mime_type();
+        if(mime_type == NULL) return NULL;
+        mime_type->extension = strdup(extension);
+        mime_type->mime = strdup("text/css");
+        mime_type->binary = false;
+        return mime_type;
     }
-
-    fflush(stdout);
+    else if(strcmp("js", extension) == 0) {
+        HttpMimeType * mime_type = create_http_mime_type();
+        if(mime_type == NULL) return NULL;
+        mime_type->extension = strdup(extension);
+        mime_type->mime = strdup("application/javascript");
+        mime_type->binary = false;
+        return mime_type;
+    }
+    else if(strcmp("svg", extension) == 0) {
+        HttpMimeType * mime_type = create_http_mime_type();
+        if(mime_type == NULL) return NULL;
+        mime_type->extension = strdup(extension);
+        mime_type->mime = strdup("image/svg+xml");
+        mime_type->binary = true;
+        return mime_type;
+    }
+    else if(strcmp("jpeg", extension) == 0 || strcmp("jpg", extension) == 0) {
+        HttpMimeType * mime_type = create_http_mime_type();
+        if(mime_type == NULL) return NULL;
+        mime_type->extension = strdup(extension);
+        mime_type->mime = strdup("image/jpeg");
+        mime_type->binary = true;
+        return mime_type;
+    }
+    return NULL;
 }
 
-void handle_jpeg(int socket, char * file_path) {
+/**
+ * Returns a new allocated pointer to an <B>array of chars</B> that represents
+ * the concatenation of the two provided strings.
 
-    // Available response statuses
-    static const char STATUS_OK[] = "HTTP/1.1 200 OK\r\n"
-                                    "Content-Type: image/jpeg\r\n\r\n";
-    static const char STATUS_NOT_FOUND[] = "HTTP/1.1 404 Not Found\r\n"
-                                           "Connection: close\r\n\r\n";
+ * The returned structure and its contents should be freed by the client.
+ *
+ * @return a pointer to a new allocated <B>array of chars</B> pointer,
+ *         or <I>NULL</I> if there is no enough space for allocation
+ */
+char * concat_strings(char * first, char * second) {
+    char * result = malloc(strlen(first) + strlen(second) + 1);
+    if(result == NULL) {
+        fprintf(stderr, "Failed to allocate memory for string concatenation: %s\n", strerror(errno));
+        fflush(stderr);
+        return NULL;
+    }
+    strcpy(result, first);
+    strcat(result, second);
+    return result;
+}
 
-    // Try to open and send the requested binary file
-    int descriptor = open(file_path, O_RDONLY);
-    if(descriptor > 0) {
-        printf("[Logger] requested jpeg file was found: %s\n", file_path);
-        send(socket, STATUS_OK, strlen(STATUS_OK), 0);
-        char buffer[BUFFER_SIZE];
-        int bytes;
-        while ((bytes = read(descriptor, buffer, BUFFER_SIZE)) > 0) {
-            write(socket, buffer, bytes);
+/**
+ * Sends an http header response and status using the specificied socket
+ * descriptor. If the response does not involve sending a file pass
+ * <I>NULL</I> to the mime type.
+ *
+ * @param socket_descriptor the descriptor of a open socket
+ * @param http_status_code an http status code
+ * @param mime_type a mime type that represents the content of a file to be sent
+ *
+ * @return 0 if the sending was successful and 1 otherwise.
+ */
+int send_http_header(int socket_descriptor, int http_status_code, HttpMimeType * mime_type) {
+    if(http_status_code == 200) {
+
+        // I need a variadic function for concatenation or maybe a library
+        // for strings which I don't have right now, when I'll feel like
+        // wanting to suffer I'll code one, but for now we have this messy
+        // concatenation.
+
+        char * response = strdup("HTTP/1.1 200 OK\r\nContent-Type: ");
+        char * concat = concat_strings(response, mime_type->mime);
+        free(response);
+        response = concat_strings(concat, "\r\n\r\n");
+        free(concat);
+
+        send(socket_descriptor, response, strlen(response), 0);
+        free(response);
+
+        return 0;
+    } else if(http_status_code == 400) {
+        char * response = strdup("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+        send(socket_descriptor, response, strlen(response), 0);
+        free(response);
+
+        return 0;
+    } else if(http_status_code == 404) {
+        char * response = strdup("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
+        send(socket_descriptor, response, strlen(response), 0);
+        free(response);
+
+        return 0;
+    } else if(http_status_code == 503) {
+        char * response = strdup("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n");
+        send(socket_descriptor, response, strlen(response), 0);
+        free(response);
+
+        return 0;
+    }
+    return 1;
+}
+
+/**
+ * Sends a file to the specificed socket client or sends an error response
+ * if the file was not found or any error ocurred, finally closes the
+ * socket connection.
+ *
+ * @param socket_descriptor an open socket descriptor
+ * @param file_path the path of the file to be sent
+ * @param mime_type the mime of the file to be sent
+ */
+void send_file(int socket_descriptor, char * file_path, HttpMimeType * mime_type) {
+    // Handle binary file sending
+    if(mime_type->binary) {
+
+        int file_descriptor = open(file_path, O_RDONLY);
+
+        if(file_descriptor > 0) {
+            send_http_header(socket_descriptor, 200, mime_type);
+
+            char buffer[BUFFER_SIZE];
+            int bytes;
+
+            // Write the binary file in chunks (using BUFFER_SIZE as the size of the chunk)
+            while ((bytes = read(file_descriptor, buffer, BUFFER_SIZE)) > 0) {
+                write(socket_descriptor, buffer, bytes);
+            }
+
+            close(file_descriptor);
+            close(socket_descriptor);
+        } else {
+            send_http_header(socket_descriptor, 404, NULL);
         }
-        close(descriptor);
-        printf("[Logger] requested jpeg file was transmitted: %s\n", file_path);
-    } else {
-        printf("[Logger] requested jpeg file was not found: %s\n", file_path);
-        write(socket, STATUS_NOT_FOUND, strlen(STATUS_NOT_FOUND));
+
     }
+    // Handle text file sending
+    else {
 
-    fflush(stdout);
-}
+        FILE * file = fopen(file_path, "r");
 
-void handle_svg(int socket, char * file_path) {
+        if(file != NULL) {
+            send_http_header(socket_descriptor, 200, mime_type);
 
-    // Available response statuses
-    static const char STATUS_OK[] = "HTTP/1.1 200 OK\r\n"
-                                    "Content-Type: image/svg+xml\r\n\r\n";
-    static const char STATUS_NOT_FOUND[] = "HTTP/1.1 404 Not Found\r\n"
-                                           "Connection: close\r\n\r\n";
+            fseek(file, 0, SEEK_END);
+            long bytes_size = ftell(file);
+            fseek(file, 0, SEEK_SET);
 
-    // Try to open and send the requested binary file
-    int descriptor = open(file_path, O_RDONLY);
-    if(descriptor > 0) {
-        printf("[Logger] requested svg file was found: %s\n", file_path);
-        send(socket, STATUS_OK, strlen(STATUS_OK), 0);
-        char buffer[BUFFER_SIZE];
-        int bytes;
-        while ((bytes = read(descriptor, buffer, BUFFER_SIZE)) > 0) {
-            write(socket, buffer, bytes);
+            char * buffer = malloc(bytes_size * sizeof(char));
+
+            // Read the html file straight to the buffer
+            fread(buffer, bytes_size, 1, file);
+
+            // Transmit the buffer directly to the client
+            write(socket_descriptor, buffer, bytes_size);
+            free(buffer);
+
+            fclose(file);
+            close(socket_descriptor);
+        } else {
+            send_http_header(socket_descriptor, 404, NULL);
         }
-        close(descriptor);
-        printf("[Logger] requested svg file was transmitted: %s\n", file_path);
-    } else {
-        printf("[Logger] requested svg file was not found: %s\n", file_path);
-        write(socket, STATUS_NOT_FOUND, strlen(STATUS_NOT_FOUND));
-    }
 
-    fflush(stdout);
+    }
 }
 
-void *handle_request(void * socket) {
+/**
+ * Handles the client request and sends a response.
+ *
+ * @param socket an open socket to whom send a response.
+ *
+ * @return a pointer to this method
+ */
+void * handle_request(void * socket) {
 
     // Get the socket descriptor.
     int socket_descriptor = * ((int *)socket);
@@ -628,11 +762,7 @@ void *handle_request(void * socket) {
 
     // If we run out of available connections reject connection
     if(current_connections + 1 > MAX_CONNECTIONS) {
-        static const char STATUS_UNAVAILABLE[] = "HTTP/1.1 503 Service Unavailable\r\n"
-                                                 "Content-Type: text/html\r\n\r\n"
-                                                 "<!doctype html><html><body>Server is busy.</body></html>";
-        // Send response
-        write(socket_descriptor, STATUS_UNAVAILABLE, strlen(STATUS_UNAVAILABLE));
+        send_http_header(socket_descriptor, 503, NULL);
         sem_post(&lock);
         free(socket);
         shutdown(socket_descriptor, SHUT_RDWR);
@@ -645,83 +775,73 @@ void *handle_request(void * socket) {
 
     sem_post(&lock);
 
-    // Obtain the request
     char client_message[BUFFER_SIZE];
+
+    // Read the entire client message to the buffer
     int request = recv(socket_descriptor, client_message, BUFFER_SIZE, 0);
 
     if(request < 0) {
-        printf("[Logger] socket message reception failed\n");
+        printf("[Server] Client message reception failed\n");
     }
     else if (request == 0) {
-        printf("[Logger] socket closed because client disconnected unexpectedly\n");
+        printf("[Server] Client disconnected unexpectedly and closed the connection\n");
     }
     else {
         int parse_status;
-        HttpRequest * httpRequest = parse_http_request(client_message, &parse_status);
+        HttpRequest * http_request = parse_http_request(client_message, &parse_status);
 
+        // Printing status to the console
         printf("\n");
         printf("1. Parse parse_status: %d\n", parse_status);
         if(parse_status == 0) {
-            printf("2. Request method: %s\n", httpRequest->method);
-            printf("3. URI: %s\n", httpRequest->uri);
-            printf("4. Http Version: %s\n", httpRequest->version);
-            printf("5. Body: %s\n", httpRequest->body);
+            printf("2. Request method: %s\n", http_request->method);
+            printf("3. URI: %s\n", http_request->uri);
+            printf("4. Http Version: %s\n", http_request->version);
+            printf("5. Http Headers:\n");
+            HttpHeader * header = http_request->headers;
+            while(header != NULL) {
+                printf("   - %s : %s\n", header->name, header->value);
+                header = header->next;
+            }
+            printf("6. Body: %s\n", http_request->body);
+
         }
         printf("\n");
         fflush(stdout);
+        // END
 
+        // If the parsing was successful
         if(parse_status == 0) {
-            char * file_path = malloc((strlen(PUBLIC_FOLDER) + strlen(httpRequest->uri)) * sizeof(char));
-            strcpy(file_path, PUBLIC_FOLDER);
-            strcat(file_path, httpRequest->uri);
 
-            char * to_tokenize = strdup(httpRequest->uri);
+            // Concat the requested file path with the public resources folder
+            char * file_path = malloc((strlen(PUBLIC_FOLDER) + strlen(http_request->uri)) * sizeof(char));
+            strcpy(file_path, PUBLIC_FOLDER);
+            strcat(file_path, http_request->uri);
+
+            // Extract the extension of the requested file
+            char * to_tokenize = strdup(http_request->uri);
             strtok(to_tokenize, ".");
             char * extension = strtok(NULL, ".");
 
-            if (strcmp(extension, "html") == 0) {
-                // Prevent multiple threads access disk at the same time
+            // Extract the MIME information using the extracted file extension
+            HttpMimeType * mime_type = from_extension_mime_type(extension);
+            if(mime_type != NULL) {
                 sem_wait(&lock);
-                handle_html(socket_descriptor, file_path);
-                sem_post(&lock);
-            }
-            else if (strcmp(extension, "css") == 0) {
-
-                // Prevent multiple threads access disk at the same time
-                sem_wait(&lock);
-                handle_css(socket_descriptor, file_path);
-                sem_post(&lock);
-            }
-            else if (strcmp(extension, "js") == 0) {
-
-                // Prevent multiple threads access disk at the same time
-                sem_wait(&lock);
-                handle_js(socket_descriptor, file_path);
-                sem_post(&lock);
-            }
-            else if (strcmp(extension, "jpeg") == 0) {
-
-                // Prevent multiple threads access disk at the same time
-                sem_wait(&lock);
-                handle_jpeg(socket_descriptor, file_path);
-                sem_post(&lock);
-            }
-            else if (strcmp(extension, "svg") == 0) {
-
-                // Prevent multiple threads access disk at the same time
-                sem_wait(&lock);
-                handle_svg(socket_descriptor, file_path);
+                // Send the file to the client or an error response if file was not found
+                send_file(socket_descriptor, file_path, mime_type);
                 sem_post(&lock);
             } else {
-                static const char STATUS_BAD_REQUEST[] = "HTTP/1.1 400 Bad Request\r\n"
-                                                         "Connection: close\r\n\r\n";
-                write(socket_descriptor, STATUS_BAD_REQUEST, strlen(STATUS_BAD_REQUEST));
+                send_http_header(socket_descriptor, 400, NULL);
             }
 
+            // Free allocated resources
+            free(file_path);
+            free(to_tokenize);
+            free_http_mime_type(mime_type);
+            free(http_request);
+
         } else {
-            static const char STATUS_BAD_REQUEST[] = "HTTP/1.1 400 Bad Request\r\n"
-                                                     "Connection: close\r\n\r\n";
-            write(socket_descriptor, STATUS_BAD_REQUEST, strlen(STATUS_BAD_REQUEST));
+            send_http_header(socket_descriptor, 400, NULL);
         }
 
     }
@@ -763,7 +883,7 @@ int main(int argc, char *argv[]) {
         fflush(stdout);
         return 1;
     }
-    listen(socket_descriptor, 50);
+    listen(socket_descriptor, MAX_CONNECTIONS);
 
     printf("[Server] Waiting for incoming connections...\n");
     fflush(stdout);

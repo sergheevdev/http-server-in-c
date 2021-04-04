@@ -4,12 +4,17 @@
 
 ## Introduction
 
-**Simple HTTP Server**: is a simple HTTP server implementation in C using [RFC2616](https://tools.ietf.org/html/rfc2616).
+**Simple HTTP Server**: is a simple HTTP server implementation attempt in C trying to apply the [RFC2616](https://tools.ietf.org/html/rfc2616) standard.
+
+## Features
+- Static resources serving (capable of serving static file resources like html, css, js, jpeg and svg files).
+- Multi-threaded handling of requests.
 
 ### Warning
-- The web server was implemented just for fun in a few hours, not intendeed to be a really efficient web server.
-- This implementation has memory leaks and is currently a work in progress.
-- The design is the worst thing I've ever seen in my life, whenever I have free time I will apply refactorings and create ADT's.
+- This web server is not production ready, bug free, nor memory leaks free.
+- This implementation was just coded for fun, not intendeed to be really efficient.
+- The design of the structures and general domain is not the best.
+- Memory leaks are present in the current implementation (will be fixed soon).
 
 ### Story
 
@@ -21,9 +26,9 @@ the inner workings of sockets and how the HTTP protocol is implemented.
 1. Clone the repository to your local computer.
 2. Add execution permissions to **compile.sh**.
 3. Run the script.
-4. Enjoy the slow and with leaks web server!
+4. Enjoy our new vulnerable but fast http server :D!
 
-**NOTE**: make sure you have the gcc essential compilation packages installed
+**NOTE**: make sure you have the **gcc** essential compilation packages installed and also **valgrind** (used to check memory leaks)
 
 ## License
 
