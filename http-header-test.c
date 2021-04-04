@@ -38,7 +38,7 @@ void http_header_create_name_invalid_test() {
     assert(http_header == NULL, "[http_header_create_name_invalid_test] Expected: http_header == NULL");
     free(name);
     free(value);
-    printf("Test http_header_create_test_name_null passed!\n");
+    printf("Test http_header_create_name_invalid_test passed!\n");
 }
 
 void http_header_create_value_null_test() {
