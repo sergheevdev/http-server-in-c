@@ -661,163 +661,50 @@ int send_http_header(int socket_descriptor, int http_status_code, HttpMimeType *
     return 1;
 }
 
-void handle_html(int socket, char * file_path) {
-
+void send_file(int socket_descriptor, char * file_path, HttpMimeType * mime_type) {
     FILE * file = fopen(file_path, "r");
     if (file != NULL) {
-        printf("[Logger] requested html file was found: %s\n", file_path);
-        // Find out the file size
-        fseek(file, 0, SEEK_END);
-        long bytes_size = ftell(file);
-        fseek(file, 0, SEEK_SET);
 
-        HttpMimeType * mime_type = from_extension_mime_type("html");
-        send_http_header(socket, 200, mime_type);
-        free(mime_type);
+        if(mime_type->binary) {
+            fclose(file);
 
-        char * buffer = malloc(bytes_size * sizeof(char));
+            int descriptor = open(file_path, O_RDONLY);
 
-        // Read the html file straight to the buffer
-        fread(buffer, bytes_size, 1, file);
+            send_http_header(socket_descriptor, 200, mime_type);
 
-        // Transmit the buffer directly to the client
-        write (socket, buffer, bytes_size);
-        free(buffer);
+            char buffer[BUFFER_SIZE];
+            int bytes;
 
-        fclose(file);
-        printf("[Logger] requested html file was transmitted: %s\n", file_path);
-    }
-    else {
-        printf("[Logger] requested html file was not found: %s\n", file_path);
-        // If the file does not exist
-        send_http_header(socket, 404, NULL);
-    }
+            // Write the binary file in chunks (using BUFFER_SIZE as the size of the chunk)
+            while ((bytes = read(descriptor, buffer, BUFFER_SIZE)) > 0) {
+                write(socket_descriptor, buffer, bytes);
+            }
 
-    fflush(stdout);
-}
+            close(socket_descriptor);
+        } else {
 
-void handle_js(int socket, char * file_path) {
+            fseek(file, 0, SEEK_END);
+            long bytes_size = ftell(file);
+            fseek(file, 0, SEEK_SET);
 
-    FILE * file = fopen(file_path, "r");
-    if (file != NULL) {
-        printf("[Logger] requested js file was found: %s\n", file_path);
-        // Find out the file size
-        fseek(file, 0, SEEK_END);
-        long bytes_size = ftell(file);
-        fseek(file, 0, SEEK_SET);
+            send_http_header(socket_descriptor, 200, mime_type);
 
-        // Send successful response header
-        HttpMimeType * mime_type = from_extension_mime_type("js");
-        send_http_header(socket, 200, mime_type);
-        free(mime_type);
+            char * buffer = malloc(bytes_size * sizeof(char));
 
-        char * buffer = malloc(bytes_size * sizeof(char));
+            // Read the html file straight to the buffer
+            fread(buffer, bytes_size, 1, file);
 
-        // Read the html file straight to the buffer
-        fread(buffer, bytes_size, 1, file);
+            // Transmit the buffer directly to the client
+            write(socket_descriptor, buffer, bytes_size);
+            free(buffer);
 
-        // Transmit the buffer directly to the client
-        write (socket, buffer, bytes_size);
-        free(buffer);
+            fclose(file);
+            close(socket_descriptor);
 
-        fclose(file);
-        printf("[Logger] requested js file was transmitted: %s\n", file_path);
-    }
-    else {
-        printf("[Logger] requested js file was not found: %s\n", file_path);
-        // If the file does not exist
-        send_http_header(socket, 404, NULL);
-    }
-
-    fflush(stdout);
-}
-
-void handle_css(int socket, char * file_path) {
-
-    FILE * file = fopen(file_path, "r");
-    if (file != NULL) {
-        printf("[Logger] requested css file was found: %s\n", file_path);
-        // Find out the file size
-        fseek(file, 0, SEEK_END);
-        long bytes_size = ftell(file);
-        fseek(file, 0, SEEK_SET);
-
-        // Send successful response header
-        HttpMimeType * mime_type = from_extension_mime_type("css");
-        send_http_header(socket, 200, mime_type);
-        free(mime_type);
-
-        char * buffer = malloc(bytes_size * sizeof(char));
-
-        // Read the html file straight to the buffer
-        fread(buffer, bytes_size, 1, file);
-
-        // Transmit the buffer directly to the client
-        write (socket, buffer, bytes_size);
-        free(buffer);
-
-        fclose(file);
-        printf("[Logger] requested css file was transmitted: %s\n", file_path);
-    }
-    else {
-        printf("[Logger] requested css file was not found: %s\n", file_path);
-        // If the file does not exist
-        send_http_header(socket, 404, NULL);
-    }
-
-    fflush(stdout);
-}
-
-void handle_jpeg(int socket, char * file_path) {
-
-    // Try to open and send the requested binary file
-    int descriptor = open(file_path, O_RDONLY);
-    if(descriptor > 0) {
-        printf("[Logger] requested jpeg file was found: %s\n", file_path);
-
-        HttpMimeType * mime_type = from_extension_mime_type("jpeg");
-        send_http_header(socket, 200, mime_type);
-        free(mime_type);
-
-        char buffer[BUFFER_SIZE];
-        int bytes;
-        while ((bytes = read(descriptor, buffer, BUFFER_SIZE)) > 0) {
-            write(socket, buffer, bytes);
         }
-        close(descriptor);
-        printf("[Logger] requested jpeg file was transmitted: %s\n", file_path);
     } else {
-        printf("[Logger] requested jpeg file was not found: %s\n", file_path);
-        send_http_header(socket, 404, NULL);
+        send_http_header(socket_descriptor, 404, NULL);
     }
-
-    fflush(stdout);
-}
-
-void handle_svg(int socket, char * file_path) {
-
-    // Try to open and send the requested binary file
-    int descriptor = open(file_path, O_RDONLY);
-    if(descriptor > 0) {
-        printf("[Logger] requested svg file was found: %s\n", file_path);
-
-        HttpMimeType * mime_type = from_extension_mime_type("svg");
-        send_http_header(socket, 200, mime_type);
-        free(mime_type);
-
-        char buffer[BUFFER_SIZE];
-        int bytes;
-        while ((bytes = read(descriptor, buffer, BUFFER_SIZE)) > 0) {
-            write(socket, buffer, bytes);
-        }
-        close(descriptor);
-        printf("[Logger] requested svg file was transmitted: %s\n", file_path);
-    } else {
-        printf("[Logger] requested svg file was not found: %s\n", file_path);
-        send_http_header(socket, 404, NULL);
-    }
-
-    fflush(stdout);
 }
 
 void *handle_request(void * socket) {
@@ -877,55 +764,18 @@ void *handle_request(void * socket) {
             char * extension = strtok(NULL, ".");
 
             HttpMimeType * mime_type = from_extension_mime_type(extension);
-            printf("\n");
             if(mime_type != NULL) {
-                printf("1. Mime extension: %s\n", mime_type->extension);
-                printf("2. Mime value: %s\n", mime_type->mime);
-                printf("3. Is binary: %s\n", mime_type->binary ? "true" : "false");
-                free_http_mime_type(mime_type);
-            } else {
-                printf("1. No mime association found\n");
-            }
-            printf("\n");
-
-            if (strcmp(extension, "html") == 0) {
-                // Prevent multiple threads access disk at the same time
                 sem_wait(&lock);
-                handle_html(socket_descriptor, file_path);
-                sem_post(&lock);
-            }
-            else if (strcmp(extension, "css") == 0) {
-
-                // Prevent multiple threads access disk at the same time
-                sem_wait(&lock);
-                handle_css(socket_descriptor, file_path);
-                sem_post(&lock);
-            }
-            else if (strcmp(extension, "js") == 0) {
-
-                // Prevent multiple threads access disk at the same time
-                sem_wait(&lock);
-                handle_js(socket_descriptor, file_path);
-                sem_post(&lock);
-            }
-            else if (strcmp(extension, "jpeg") == 0) {
-
-                // Prevent multiple threads access disk at the same time
-                sem_wait(&lock);
-                handle_jpeg(socket_descriptor, file_path);
-                sem_post(&lock);
-            }
-            else if (strcmp(extension, "svg") == 0) {
-
-                // Prevent multiple threads access disk at the same time
-                sem_wait(&lock);
-                handle_svg(socket_descriptor, file_path);
+                send_file(socket_descriptor, file_path, mime_type);
                 sem_post(&lock);
             } else {
                 send_http_header(socket_descriptor, 400, NULL);
             }
 
-            free_http_request(http_request);
+            free(file_path);
+            free(to_tokenize);
+            free_http_mime_type(mime_type);
+            free(http_request);
 
         } else {
             send_http_header(socket_descriptor, 400, NULL);
