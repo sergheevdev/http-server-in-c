@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <fcntl.h>
 #include <semaphore.h>
+#include <ctype.h>
 
 //#define PUBLIC_FOLDER "/home/server/public"
 #define PUBLIC_FOLDER "/home/sscid/sources"
@@ -60,6 +61,7 @@ HttpRequest * create_http_request() {
     HttpRequest * request = malloc(sizeof(HttpRequest));
     if(request == NULL) {
         fprintf(stderr, "Failed to allocate memory for http request: %s\n", strerror(errno));
+        fflush(stderr);
         return NULL;
     }
     request->method = NULL;
@@ -123,7 +125,7 @@ HttpRequest * parse_http_request(char * message, int * status) {
         size++;
         traversal++;
     }
-    // Is size exceeds longest valid method name size given input is invalid
+    // If size exceeds longest valid method name size given input is invalid
     if(size < 3 || size > 7) {
         (* status) = VALIDATION_FAILED_CODE;
         free_http_request(request);
@@ -156,31 +158,66 @@ HttpRequest * parse_http_request(char * message, int * status) {
 
     // ## 2. PARSING HTTP REQUEST URI ##
 
-    // The "piece" should never freed because it points to the original buffer
     piece = strtok(NULL, " \t");
+
+    // ### 2.1 Check http uri is present  ###
     if(piece == NULL) {
-        // Set invalid format status code because no http uri was found in the request
-        (* status) = 4;
-        // Free the allocated resources
+        (* status) = INVALID_FORMAT_CODE;
         free_http_request(request);
         free(to_tokenize);
         return NULL;
     }
 
     char * uri = strdup(piece);
-    if(uri != NULL) {
 
-        // TODO: Implement URI validation algorithm
-
-        request->uri = uri;
-    } else {
-        // Set invalid format status code because no memory was available for allocation
-        (* status) = 3;
-        // Free the allocated resources
+    // ### 2.2 Check piece duplication was successful ###
+    if(uri == NULL) {
+        (* status) = NO_MEMORY_CODE;
         free_http_request(request);
         free(to_tokenize);
         return NULL;
     }
+
+    // A basic domain validation is performed, for security concerns and more concrete validations add extra layer
+    // @see https://stackoverflow.com/questions/4669692/valid-characters-for-directory-part-of-a-url-for-short-links
+    // Valid chars: a-z A-Z 0-9 . - _ ~ ! $ & ' ( ) * + , ; = : @ % /
+    traversal = uri;
+    bool is_valid_uri = true;
+    while((* traversal) != '\0' && is_valid_uri) {
+        is_valid_uri =
+                isalnum((* traversal))
+                || (* traversal) == '.'
+                || (* traversal) == '-'
+                || (* traversal) == '_'
+                || (* traversal) == '~'
+                || (* traversal) == '!'
+                || (* traversal) == '$'
+                || (* traversal) == '&'
+                || (* traversal) == '\''
+                || (* traversal) == '('
+                || (* traversal) == ')'
+                || (* traversal) == '*'
+                || (* traversal) == '+'
+                || (* traversal) == ','
+                || (* traversal) == ';'
+                || (* traversal) == '='
+                || (* traversal) == ':'
+                || (* traversal) == '@'
+                || (* traversal) == '%'
+                || (* traversal) == '/';
+        traversal++;
+    }
+
+    // ### 2.3 Ensure http path components are valid ###
+    if(is_valid_uri == false) {
+        (* status) = VALIDATION_FAILED_CODE;
+        free_http_request(request);
+        free(to_tokenize);
+        free(uri);
+        return NULL;
+    }
+
+    request->uri = uri;
 
     // 3. Parsing the http request protocol version
     // The "piece" should never freed because it points to the original buffer
