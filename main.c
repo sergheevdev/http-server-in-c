@@ -182,8 +182,6 @@ HttpRequest * parse_http_request(char * message, int * status) {
 
     char * uri = strdup(piece);
 
-    printf("Var %s\n", uri);
-
     // ### 2.2 Check piece duplication was successful ###
     if(uri == NULL) {
         (* status) = NO_MEMORY_CODE;
@@ -661,6 +659,7 @@ void *handle_request(void * socket) {
         int parse_status;
         HttpRequest * httpRequest = parse_http_request(client_message, &parse_status);
 
+        printf("\n");
         printf("1. Parse parse_status: %d\n", parse_status);
         if(parse_status == 0) {
             printf("2. Request method: %s\n", httpRequest->method);
@@ -668,6 +667,7 @@ void *handle_request(void * socket) {
             printf("4. Http Version: %s\n", httpRequest->version);
             printf("5. Body: %s\n", httpRequest->body);
         }
+        printf("\n");
         fflush(stdout);
 
         if(parse_status == 0) {
