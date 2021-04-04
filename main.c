@@ -41,49 +41,15 @@ struct mime {
     bool binary;
 };
 
-void free_http_header(HttpHeader * header) {
-    if(header == NULL) return;
-    if(header->name != NULL) free(header->name);
-    if(header->value != NULL) free(header->value);
-    free(header);
-}
-
-void free_http_request(HttpRequest * request) {
-    if(request == NULL) return;
-    if(request->method != NULL) free(request->method);
-    if(request->uri != NULL) free(request->uri);
-    HttpHeader * header = request->headers;
-    HttpHeader * previous = header;
-    while(header != NULL) {
-        header = header->next;
-        free_http_header(previous);
-        previous = header;
-    }
-    free_http_header(previous);
-    if(request->body != NULL) free(request->body);
-    free(request);
-}
-
-void free_http_mime_type(HttpMimeType * mime_type) {
-    if(mime_type == NULL) return;
-    if(mime_type->extension != NULL) free(mime_type->extension);
-    if(mime_type->mime != NULL) free(mime_type->mime);
-    free(mime_type);
-}
-
-HttpMimeType * create_http_mime_type() {
-    HttpMimeType * mime_type = malloc(sizeof(HttpMimeType));
-    if(mime_type == NULL) {
-        fprintf(stderr, "Failed to allocate memory for http mime type: %s\n", strerror(errno));
-        fflush(stderr);
-        return NULL;
-    }
-    mime_type->extension = NULL;
-    mime_type->mime = NULL;
-    mime_type->binary = false;
-    return mime_type;
-}
-
+/**
+ * Returns a pointer to a new allocated <B>HttpHeader</B> structure, with
+ * all its fields initialized to <I>NULL</I>.
+ *
+ * The structure and its contents should be freed by the client.
+ *
+ * @return a pointer to a new allocated <B>HttpHeader</B> structure, or
+ *         <I>NULL</I> if there is no enough space for allocation
+ */
 HttpHeader * create_http_header() {
     HttpHeader * header = malloc(sizeof(HttpHeader));
     if(header == NULL) {
@@ -96,6 +62,29 @@ HttpHeader * create_http_header() {
     return header;
 }
 
+/**
+ * Frees the given <B>HttpHeader</B> structure and its contents. If the given
+ * header or any of its fields is <I>NULL</I>, no freeing is performed and
+ * that variable is just ignored.
+ *
+ * @param header a pointer to a <B>HttpHeader</B>
+ */
+void free_http_header(HttpHeader * header) {
+    if(header == NULL) return;
+    if(header->name != NULL) free(header->name);
+    if(header->value != NULL) free(header->value);
+    free(header);
+}
+
+/**
+ * Returns a pointer to a new allocated <B>HttpRequest</B> structure, with
+ * all its fields initialized to <I>NULL</I>.
+ *
+ * The structure and its contents should be freed by the client.
+ *
+ * @return a pointer to a new allocated <B>HttpRequest</B> structure, or
+ *         <I>NULL</I> if there is no enough space for allocation
+ */
 HttpRequest * create_http_request() {
     HttpRequest * request = malloc(sizeof(HttpRequest));
     if(request == NULL) {
@@ -110,59 +99,60 @@ HttpRequest * create_http_request() {
     return request;
 }
 
-HttpMimeType * from_extension_mime_type(char * extension) {
-    if(strcmp("html", extension) == 0) {
-        HttpMimeType * mime_type = create_http_mime_type();
-        if(mime_type == NULL) return NULL;
-        mime_type->extension = strdup(extension);
-        mime_type->mime = strdup("text/html");
-        mime_type->binary = false;
-        return mime_type;
-    } else if(strcmp("css", extension) == 0) {
-        HttpMimeType * mime_type = create_http_mime_type();
-        if(mime_type == NULL) return NULL;
-        mime_type->extension = strdup(extension);
-        mime_type->mime = strdup("text/css");
-        mime_type->binary = false;
-        return mime_type;
-    } else if(strcmp("js", extension) == 0) {
-        HttpMimeType * mime_type = create_http_mime_type();
-        if(mime_type == NULL) return NULL;
-        mime_type->extension = strdup(extension);
-        mime_type->mime = strdup("application/javascript");
-        mime_type->binary = false;
-        return mime_type;
-    } else if(strcmp("svg", extension) == 0) {
-        HttpMimeType * mime_type = create_http_mime_type();
-        if(mime_type == NULL) return NULL;
-        mime_type->extension = strdup(extension);
-        mime_type->mime = strdup("image/svg+xml");
-        mime_type->binary = true;
-        return mime_type;
-    } else if(strcmp("jpeg", extension) == 0 || strcmp("jpg", extension) == 0) {
-        HttpMimeType * mime_type = create_http_mime_type();
-        if(mime_type == NULL) return NULL;
-        mime_type->extension = strdup(extension);
-        mime_type->mime = strdup("image/jpeg");
-        mime_type->binary = true;
-        return mime_type;
+/**
+ * Frees the given <B>HttpRequest</B> structure and its contents. If
+ * the given header or any of its fields is <I>NULL</I>, no freeing
+ * is performed and that variable is just ignored.
+ *
+ * @param request a pointer to a <B>HttpRequest</B>
+ */
+void free_http_request(HttpRequest * request) {
+    if(request == NULL) return;
+    if(request->method != NULL) free(request->method);
+    if(request->uri != NULL) free(request->uri);
+    if(request->body != NULL) free(request->body);
+    // Free the linked list of headers
+    HttpHeader * header = request->headers;
+    HttpHeader * previous = header;
+    while(header != NULL) {
+        header = header->next;
+        free_http_header(previous);
+        previous = header;
     }
-    return NULL;
+    free_http_header(previous);
+    free(request);
 }
 
+
+/**
+ * Attempts to parse the given message into a http request, performing
+ * the necessary validations and checks.
+ *
+ * @param message an http message to be parsed
+ * @param status the result status code of the parsing
+ *
+ * @return a new allocated pointer with the parsed <B>HttpRequest</B>
+ */
 HttpRequest * parse_http_request(char * message, int * status) {
 
-    static const int SUCCESS_CODE = 0;            // If no parsing or validation errors ocurred (i.e. successful parsing :D)
-    static const int NO_MEMORY_CODE = 1;          // If there was no memory for some allocation (i.e. any allocation performed during parsing)
-    static const int INVALID_FORMAT_CODE = 2;     // If the parsed request does not follow rfc2616 http request format (i.e. some piece like request method not present)
-    static const int VALIDATION_FAILED_CODE = 3;  // If the provided input was not successfully validated (i.e. provided unexistent http method)
+    // If the parsing and validation passsed successfully
+    static const int SUCCESS_CODE = 0;
+
+    // If there was no memory for some allocation (i.e. could not allocate memory for request body, or request method, etc)
+    static const int NO_MEMORY_CODE = 1;
+
+    // If the parsed request does not follow rfc2616 http request format (i.e. some piece like request method is missing)
+    static const int INVALID_FORMAT_CODE = 2;
+
+    // If any of the values provided in the request was not successfully validated (i.e. invalid http method like "HELLO")
+    static const int VALIDATION_FAILED_CODE = 3;
 
     if(message == NULL) {
         (* status) = INVALID_FORMAT_CODE;
         return NULL;
     }
 
-    // Set default return code to: successful
+    // Set default return code to successful
     (* status) = SUCCESS_CODE;
 
     HttpRequest * http_request = create_http_request();
@@ -198,14 +188,15 @@ HttpRequest * parse_http_request(char * message, int * status) {
     }
 
     // ### 1.3 Ensure the length of the http method is valid ###
-    // Shortest method length = 3 and longest method length = 7
     int size = 0;
     char * traversal = method;
     while((* traversal) != '\0' && size <= 7) {
         size++;
         traversal++;
     }
-    // If size exceeds longest valid method name size given input is invalid
+    // Shortest method length = 3 and longest method length = 7, so if the
+    // size exceeds longest valid method name size, or is smaller than the
+    // shortest method length given input is invalid.
     if(size < 3 || size > 7) {
         (* status) = VALIDATION_FAILED_CODE;
         free_http_request(http_request);
@@ -214,7 +205,7 @@ HttpRequest * parse_http_request(char * message, int * status) {
         return NULL;
     }
 
-    // @see https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html
+    // RFC2616 request methods: https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html
     bool is_valid_method =
             strcmp(method, "GET") == 0
             || strcmp(method, "POST") == 0
@@ -225,7 +216,7 @@ HttpRequest * parse_http_request(char * message, int * status) {
             || strcmp(method, "TRACE") == 0
             || strcmp(method, "CONNECT") == 0;
 
-    // ### 1.4 Ensure http method is a valid defined method in rfc2616 ###
+    // ### 1.4 Ensure http method is a valid defined method in RFC2616 ###
     if(is_valid_method == false) {
         (* status) = VALIDATION_FAILED_CODE;
         free_http_request(http_request);
@@ -240,7 +231,7 @@ HttpRequest * parse_http_request(char * message, int * status) {
 
     piece = strtok_r(NULL, " \t", &message_context);
 
-    // ### 2.1 Check http uri is present  ###
+    // ### 2.1 Check http uri is present ###
     if(piece == NULL) {
         (* status) = INVALID_FORMAT_CODE;
         free_http_request(http_request);
@@ -260,7 +251,7 @@ HttpRequest * parse_http_request(char * message, int * status) {
 
     // Basic domain and security validations are performed, for security hardening add extra layer of validation
     // @see https://stackoverflow.com/questions/4669692/valid-characters-for-directory-part-of-a-url-for-short-links
-    // Valid chars: a-z A-Z 0-9 . - _ ~ ! $ & ' ( ) * + , ; = : @ % /
+    // Valid characters for the uri/path: "a-z A-Z 0-9 . - _ ~ ! $ & ' ( ) * + , ; = : @ % /"
     traversal = uri;
     bool is_valid_uri = true;
     char previous_char = '\0';
@@ -406,9 +397,9 @@ HttpRequest * parse_http_request(char * message, int * status) {
         bool is_header_name_valid = true;
         while((* traversal) != '\0' && is_header_name_valid) {
             is_header_name_valid =
-                   ((* traversal) >= 'a' && (* traversal) <= 'z')  // Is lowecase letter
-                || ((* traversal) >= 'A' && (* traversal) <= 'Z')  // Is uppercase letter
-                || ((* traversal) == '-');                         // Standard word separator
+                    ((* traversal) >= 'a' && (* traversal) <= 'z')     // Is lowecase letter
+                    || ((* traversal) >= 'A' && (* traversal) <= 'Z')  // Is uppercase letter
+                    || ((* traversal) == '-');                         // Standard word separator
             traversal++;
         }
 
@@ -496,26 +487,76 @@ HttpRequest * parse_http_request(char * message, int * status) {
 }
 
 
+HttpMimeType * create_http_mime_type() {
+    HttpMimeType * mime_type = malloc(sizeof(HttpMimeType));
+    if(mime_type == NULL) {
+        fprintf(stderr, "Failed to allocate memory for http mime type: %s\n", strerror(errno));
+        fflush(stderr);
+        return NULL;
+    }
+    mime_type->extension = NULL;
+    mime_type->mime = NULL;
+    mime_type->binary = false;
+    return mime_type;
+}
+
+void free_http_mime_type(HttpMimeType * mime_type) {
+    if(mime_type == NULL) return;
+    if(mime_type->extension != NULL) free(mime_type->extension);
+    if(mime_type->mime != NULL) free(mime_type->mime);
+    free(mime_type);
+}
+
+HttpMimeType * from_extension_mime_type(char * extension) {
+    if(strcmp("html", extension) == 0) {
+        HttpMimeType * mime_type = create_http_mime_type();
+        if(mime_type == NULL) return NULL;
+        mime_type->extension = strdup(extension);
+        mime_type->mime = strdup("text/html");
+        mime_type->binary = false;
+        return mime_type;
+    } else if(strcmp("css", extension) == 0) {
+        HttpMimeType * mime_type = create_http_mime_type();
+        if(mime_type == NULL) return NULL;
+        mime_type->extension = strdup(extension);
+        mime_type->mime = strdup("text/css");
+        mime_type->binary = false;
+        return mime_type;
+    } else if(strcmp("js", extension) == 0) {
+        HttpMimeType * mime_type = create_http_mime_type();
+        if(mime_type == NULL) return NULL;
+        mime_type->extension = strdup(extension);
+        mime_type->mime = strdup("application/javascript");
+        mime_type->binary = false;
+        return mime_type;
+    } else if(strcmp("svg", extension) == 0) {
+        HttpMimeType * mime_type = create_http_mime_type();
+        if(mime_type == NULL) return NULL;
+        mime_type->extension = strdup(extension);
+        mime_type->mime = strdup("image/svg+xml");
+        mime_type->binary = true;
+        return mime_type;
+    } else if(strcmp("jpeg", extension) == 0 || strcmp("jpg", extension) == 0) {
+        HttpMimeType * mime_type = create_http_mime_type();
+        if(mime_type == NULL) return NULL;
+        mime_type->extension = strdup(extension);
+        mime_type->mime = strdup("image/jpeg");
+        mime_type->binary = true;
+        return mime_type;
+    }
+    return NULL;
+}
+
+
+
+
+
+
 // Keeps track of the current number of connections
 int current_connections = 0;
 
 // Controls threading actions (i.e. no multiple threads accesing disk, concurrent connections amount modification)
 sem_t lock;
-
-/*
- * REFERENCES:
- * - https://tools.ietf.org/html/rfc2616
- * - https://stackoverflow.com/questions/176409/build-a-simple-http-server-in-c
- * - https://en.wikipedia.org/wiki/Berkeley_sockets
- * TO-DO:
- * - Abstract away "handle_x" (image handlers) to a generic binary file reader
- * - Abstract away "handle_y" (plain text handlers) to a generic text file reader (and not read entire html file to a buffer but send by pieces)
- * - Create request parser, request structure (headers, method, etc) and builder (to prevent manual tokenization -> leaky abstractions)
- * - Create response parser, response structure (response status, content type, etc) and builder (to prevent hardcoded responses)
- * - Allow to add custom request path handlers (like low level controllers, so we could associate a path with a concrete handler)
- * - Use best error handling practices
- * - Test with valgrind to prevent memory leaks
- */
 
 void handle_html(int socket, char * file_path) {
 
