@@ -115,7 +115,7 @@ HttpRequest * parse_http_request(char * message, int * status) {
         return NULL;
     }
 
-    // ### 1.3 Ensure the length is the method is valid ###
+    // ### 1.3 Ensure the length of the http method is valid ###
     // Shortest method length = 3 and longest method length = 7
     int size = 0;
     char * traversal = method;
