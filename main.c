@@ -19,6 +19,7 @@
 
 typedef struct header HttpHeader;
 typedef struct request HttpRequest;
+typedef struct mime HttpMimeType;
 
 struct header {
     char * name;
@@ -34,6 +35,12 @@ struct request {
     char * body;
 };
 
+struct mime {
+    char * extension;
+    char * mime;
+    bool binary;
+};
+
 void free_http_header(HttpHeader * header) {
     if(header == NULL) return;
     if(header->name != NULL) free(header->name);
@@ -47,13 +54,34 @@ void free_http_request(HttpRequest * request) {
     if(request->uri != NULL) free(request->uri);
     HttpHeader * header = request->headers;
     HttpHeader * previous = header;
-    while(previous != NULL) {
+    while(header != NULL) {
         header = header->next;
         free_http_header(previous);
         previous = header;
     }
+    free_http_header(previous);
     if(request->body != NULL) free(request->body);
     free(request);
+}
+
+void free_http_mime_type(HttpMimeType * mime_type) {
+    if(mime_type == NULL) return;
+    if(mime_type->extension != NULL) free(mime_type->extension);
+    if(mime_type->mime != NULL) free(mime_type->mime);
+    free(mime_type);
+}
+
+HttpMimeType * create_http_mime_type() {
+    HttpMimeType * mime_type = malloc(sizeof(HttpMimeType));
+    if(mime_type == NULL) {
+        fprintf(stderr, "Failed to allocate memory for http mime type: %s\n", strerror(errno));
+        fflush(stderr);
+        return NULL;
+    }
+    mime_type->extension = NULL;
+    mime_type->mime = NULL;
+    mime_type->binary = false;
+    return mime_type;
 }
 
 HttpHeader * create_http_header() {
@@ -80,6 +108,46 @@ HttpRequest * create_http_request() {
     request->headers = NULL;
     request->body = NULL;
     return request;
+}
+
+HttpMimeType * from_extension_mime_type(char * extension) {
+    if(strcmp("html", extension) == 0) {
+        HttpMimeType * mime_type = create_http_mime_type();
+        if(mime_type == NULL) return NULL;
+        mime_type->extension = strdup(extension);
+        mime_type->mime = strdup("text/html");
+        mime_type->binary = false;
+        return mime_type;
+    } else if(strcmp("css", extension) == 0) {
+        HttpMimeType * mime_type = create_http_mime_type();
+        if(mime_type == NULL) return NULL;
+        mime_type->extension = strdup(extension);
+        mime_type->mime = strdup("text/css");
+        mime_type->binary = false;
+        return mime_type;
+    } else if(strcmp("js", extension) == 0) {
+        HttpMimeType * mime_type = create_http_mime_type();
+        if(mime_type == NULL) return NULL;
+        mime_type->extension = strdup(extension);
+        mime_type->mime = strdup("application/javascript");
+        mime_type->binary = false;
+        return mime_type;
+    } else if(strcmp("svg", extension) == 0) {
+        HttpMimeType * mime_type = create_http_mime_type();
+        if(mime_type == NULL) return NULL;
+        mime_type->extension = strdup(extension);
+        mime_type->mime = strdup("image/svg+xml");
+        mime_type->binary = true;
+        return mime_type;
+    } else if(strcmp("jpeg", extension) == 0 || strcmp("jpg", extension) == 0) {
+        HttpMimeType * mime_type = create_http_mime_type();
+        if(mime_type == NULL) return NULL;
+        mime_type->extension = strdup(extension);
+        mime_type->mime = strdup("image/jpeg");
+        mime_type->binary = true;
+        return mime_type;
+    }
+    return NULL;
 }
 
 HttpRequest * parse_http_request(char * message, int * status) {
@@ -657,27 +725,38 @@ void *handle_request(void * socket) {
     }
     else {
         int parse_status;
-        HttpRequest * httpRequest = parse_http_request(client_message, &parse_status);
+        HttpRequest * http_request = parse_http_request(client_message, &parse_status);
 
         printf("\n");
         printf("1. Parse parse_status: %d\n", parse_status);
         if(parse_status == 0) {
-            printf("2. Request method: %s\n", httpRequest->method);
-            printf("3. URI: %s\n", httpRequest->uri);
-            printf("4. Http Version: %s\n", httpRequest->version);
-            printf("5. Body: %s\n", httpRequest->body);
+            printf("2. Request method: %s\n", http_request->method);
+            printf("3. URI: %s\n", http_request->uri);
+            printf("4. Http Version: %s\n", http_request->version);
+            printf("5. Body: %s\n", http_request->body);
         }
         printf("\n");
         fflush(stdout);
 
         if(parse_status == 0) {
-            char * file_path = malloc((strlen(PUBLIC_FOLDER) + strlen(httpRequest->uri)) * sizeof(char));
+            char * file_path = malloc((strlen(PUBLIC_FOLDER) + strlen(http_request->uri)) * sizeof(char));
             strcpy(file_path, PUBLIC_FOLDER);
-            strcat(file_path, httpRequest->uri);
+            strcat(file_path, http_request->uri);
 
-            char * to_tokenize = strdup(httpRequest->uri);
+            char * to_tokenize = strdup(http_request->uri);
             strtok(to_tokenize, ".");
             char * extension = strtok(NULL, ".");
+
+            HttpMimeType * mime_type = from_extension_mime_type(extension);
+            printf("\n");
+            if(mime_type != NULL) {
+                printf("1. Mime extension: %s\n", mime_type->extension);
+                printf("2. Mime value: %s\n", mime_type->mime);
+                printf("3. Is binary: %s\n", mime_type->binary ? "true" : "false");
+            } else {
+                printf("1. No mime association found\n");
+            }
+            printf("\n");
 
             if (strcmp(extension, "html") == 0) {
                 // Prevent multiple threads access disk at the same time
@@ -717,6 +796,8 @@ void *handle_request(void * socket) {
                                                          "Connection: close\r\n\r\n";
                 write(socket_descriptor, STATUS_BAD_REQUEST, strlen(STATUS_BAD_REQUEST));
             }
+
+            free_http_request(http_request);
 
         } else {
             static const char STATUS_BAD_REQUEST[] = "HTTP/1.1 400 Bad Request\r\n"
