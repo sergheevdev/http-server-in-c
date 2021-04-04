@@ -128,6 +128,8 @@ void free_http_request(HttpRequest * request) {
  * Attempts to parse the given message into a http request, performing
  * the necessary validations and checks.
  *
+ * The structure and its contents should be freed by the client.
+ *
  * @param message an http message to be parsed
  * @param status the result status code of the parsing
  *
