@@ -73,9 +73,9 @@ HttpRequest * create_http_request() {
 
 HttpRequest * parse_http_request(char * message, int * status) {
 
-    static const int SUCCESS_CODE = 0;            // If no parsing or validation errors ocurred
-    static const int NO_MEMORY_CODE = 1;          // If there was no memory for some allocation
-    static const int INVALID_FORMAT_CODE = 2;     // If the parsed request does not follow rfc2616 http request format
+    static const int SUCCESS_CODE = 0;            // If no parsing or validation errors ocurred (i.e. successful parsing :D)
+    static const int NO_MEMORY_CODE = 1;          // If there was no memory for some allocation (i.e. any allocation performed during parsing)
+    static const int INVALID_FORMAT_CODE = 2;     // If the parsed request does not follow rfc2616 http request format (i.e. some piece like request method not present)
     static const int VALIDATION_FAILED_CODE = 3;  // If the provided input was not successfully validated (i.e. provided unexistent http method)
 
     if(message == NULL) {
