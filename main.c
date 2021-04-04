@@ -525,7 +525,16 @@ void free_http_mime_type(HttpMimeType * mime_type) {
     free(mime_type);
 }
 
-
+/**
+ * Returns a pointer to a new allocated <B>HttpMimeType</B> structure,
+ * with all the MIME type information of a given extension.
+ *
+ * The structure and its contents should be freed by the client.
+ *
+ * @return a pointer to a new allocated <B>HttpMimeType</B> structure,
+ *         or <I>NULL</I> if there is no enough space for allocation,
+ *         or there is no registered mime for that file extension
+ */
 HttpMimeType * from_extension_mime_type(char * extension) {
     if(strcmp("html", extension) == 0) {
         HttpMimeType * mime_type = create_http_mime_type();
@@ -534,28 +543,32 @@ HttpMimeType * from_extension_mime_type(char * extension) {
         mime_type->mime = strdup("text/html");
         mime_type->binary = false;
         return mime_type;
-    } else if(strcmp("css", extension) == 0) {
+    }
+    else if(strcmp("css", extension) == 0) {
         HttpMimeType * mime_type = create_http_mime_type();
         if(mime_type == NULL) return NULL;
         mime_type->extension = strdup(extension);
         mime_type->mime = strdup("text/css");
         mime_type->binary = false;
         return mime_type;
-    } else if(strcmp("js", extension) == 0) {
+    }
+    else if(strcmp("js", extension) == 0) {
         HttpMimeType * mime_type = create_http_mime_type();
         if(mime_type == NULL) return NULL;
         mime_type->extension = strdup(extension);
         mime_type->mime = strdup("application/javascript");
         mime_type->binary = false;
         return mime_type;
-    } else if(strcmp("svg", extension) == 0) {
+    }
+    else if(strcmp("svg", extension) == 0) {
         HttpMimeType * mime_type = create_http_mime_type();
         if(mime_type == NULL) return NULL;
         mime_type->extension = strdup(extension);
         mime_type->mime = strdup("image/svg+xml");
         mime_type->binary = true;
         return mime_type;
-    } else if(strcmp("jpeg", extension) == 0 || strcmp("jpg", extension) == 0) {
+    }
+    else if(strcmp("jpeg", extension) == 0 || strcmp("jpg", extension) == 0) {
         HttpMimeType * mime_type = create_http_mime_type();
         if(mime_type == NULL) return NULL;
         mime_type->extension = strdup(extension);
@@ -565,10 +578,6 @@ HttpMimeType * from_extension_mime_type(char * extension) {
     }
     return NULL;
 }
-
-
-
-
 
 
 // Keeps track of the current number of connections
