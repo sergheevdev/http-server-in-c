@@ -26,7 +26,7 @@ the inner workings of sockets and how the HTTP protocol is implemented.
 1. Clone the repository to your local computer.
 2. Add execution permissions to **compile.sh**.
 3. Run the script.
-4. Enjoy the slow and with leaks web server!
+4. Enjoy our new vulnerable but fast http server :D!
 
 **NOTE**: make sure you have the **gcc** essential compilation packages installed and also **valgrind** (used to check memory leaks)
 
