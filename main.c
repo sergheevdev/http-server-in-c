@@ -405,6 +405,8 @@ HttpRequest * parse_http_request(char * message, int * status) {
 
         http_request->body = body;
     } else {
+
+        // ### 5.3 Assign empty string when body not present ###
         char * empty = malloc(sizeof(char));
         (* empty) = '\0';
 
