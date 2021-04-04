@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <errno.h>
 #include <pthread.h>
 #include <fcntl.h>
 #include <semaphore.h>
@@ -55,68 +56,106 @@ void free_http_request(HttpRequest * request) {
     free(request);
 }
 
-HttpRequest * parse_http_request(char * message, int * status) {
-
-    // Set default parsing status to successful
-    (* status) = 0;
-
-    // Allocate the memory for the http request structure
+HttpRequest * create_http_request() {
     HttpRequest * request = malloc(sizeof(HttpRequest));
+    if(request == NULL) {
+        fprintf(stderr, "Failed to allocate memory for http request: %s\n", strerror(errno));
+        return NULL;
+    }
     request->method = NULL;
     request->uri = NULL;
     request->headers = NULL;
     request->body = NULL;
+    return request;
+}
 
+HttpRequest * parse_http_request(char * message, int * status) {
+
+    static const int SUCCESS_CODE = 0;            // If no parsing or validation errors ocurred
+    static const int NO_MEMORY_CODE = 1;          // If there was no memory for some allocation
+    static const int INVALID_FORMAT_CODE = 2;     // If the parsed request does not follow rfc2616 http request format
+    static const int VALIDATION_FAILED_CODE = 3;  // If the provided input was not successfully validated (i.e. provided unexistent http method)
+
+    if(message == NULL) {
+        (* status) = INVALID_FORMAT_CODE;
+        return NULL;
+    }
+
+    // Set default return code to: successful
+    (* status) = SUCCESS_CODE;
+
+    HttpRequest * request = create_http_request();
+    if(request == NULL) {
+        (* status) = NO_MEMORY_CODE;
+        return NULL;
+    }
+
+    // Duplicate the received message to prevent side effects
     char * to_tokenize = strdup(message);
 
-    // 1. Parsing the http request method
-    // The "piece" should never freed because it points to the original buffer
+    // ## 1. PARSING HTTP REQUEST METHOD ##
+
     char * piece = strtok(to_tokenize, " \t\n");
+
+    // ### 1.1 Check http method is present  ###
     if(piece == NULL) {
-        // Set invalid format status code because no http method was found in the request
-        (* status) = 1;
-        // Free the allocated resources
+        (* status) = INVALID_FORMAT_CODE;
         free_http_request(request);
         free(to_tokenize);
         return NULL;
     }
 
     char * method = strdup(piece);
-    if(method != NULL) {
-        /*
-         * Ensure the parsed method is a valid http rfc2616 method.
-         * @see https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html
-         */
-        bool is_valid_method =
-                strcmp(method, "GET") == 0
-                || strcmp(method, "POST") == 0
-                || strcmp(method, "DELETE") == 0
-                || strcmp(method, "PUT") == 0
-                || strcmp(method, "OPTIONS") == 0
-                || strcmp(method, "HEAD") == 0
-                || strcmp(method, "TRACE") == 0
-                || strcmp(method, "CONNECT") == 0;
 
-        if(!is_valid_method) {
-            // Set invalid format status code because no valid http method was found in the request
-            (* status) = 2;
-            // Free the allocated resources
-            free_http_request(request);
-            free(to_tokenize);
-            free(method);
-            return NULL;
-        }
-        request->method = method;
-    } else {
-        // Set invalid format status code because no memory was available for allocation
-        (* status) = 3;
-        // Free the allocated resources
+    // ### 1.2 Check piece duplication was successful ###
+    if(method == NULL) {
+        (* status) = NO_MEMORY_CODE;
         free_http_request(request);
         free(to_tokenize);
         return NULL;
     }
 
-    // 2. Parsing the http request URI
+    // ### 1.3 Ensure the length is the method is valid ###
+    // Shortest method length = 3 and longest method length = 7
+    int size = 0;
+    char * traversal = method;
+    while((* traversal) != '\0' && size <= 7) {
+        size++;
+        traversal++;
+    }
+    // Is size exceeds longest valid method name size given input is invalid
+    if(size < 3 || size > 7) {
+        (* status) = VALIDATION_FAILED_CODE;
+        free_http_request(request);
+        free(to_tokenize);
+        free(method);
+        return NULL;
+    }
+
+    // @see https://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html
+    bool is_valid_method =
+            strcmp(method, "GET") == 0
+            || strcmp(method, "POST") == 0
+            || strcmp(method, "DELETE") == 0
+            || strcmp(method, "PUT") == 0
+            || strcmp(method, "OPTIONS") == 0
+            || strcmp(method, "HEAD") == 0
+            || strcmp(method, "TRACE") == 0
+            || strcmp(method, "CONNECT") == 0;
+
+    // ### 1.4 Ensure http method is a valid defined method in rfc2616 ###
+    if(is_valid_method == false) {
+        (* status) = VALIDATION_FAILED_CODE;
+        free_http_request(request);
+        free(to_tokenize);
+        free(method);
+        return NULL;
+    }
+
+    request->method = method;
+
+    // ## 2. PARSING HTTP REQUEST URI ##
+
     // The "piece" should never freed because it points to the original buffer
     piece = strtok(NULL, " \t");
     if(piece == NULL) {
