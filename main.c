@@ -661,33 +661,50 @@ int send_http_header(int socket_descriptor, int http_status_code, HttpMimeType *
     return 1;
 }
 
+/**
+ * Sends a file to the specificed socket client or sends an error response
+ * if the file was not found or any error ocurred, finally closes the
+ * socket connection.
+ *
+ * @param socket_descriptor an open socket descriptor
+ * @param file_path the path of the file to be sent
+ * @param mime_type the mime of the file to be sent
+ */
 void send_file(int socket_descriptor, char * file_path, HttpMimeType * mime_type) {
-    FILE * file = fopen(file_path, "r");
-    if (file != NULL) {
+    // Handle binary file sending
+    if(mime_type->binary) {
 
-        if(mime_type->binary) {
-            fclose(file);
+        int file_descriptor = open(file_path, O_RDONLY);
 
-            int descriptor = open(file_path, O_RDONLY);
-
+        if(file_descriptor > 0) {
             send_http_header(socket_descriptor, 200, mime_type);
 
             char buffer[BUFFER_SIZE];
             int bytes;
 
             // Write the binary file in chunks (using BUFFER_SIZE as the size of the chunk)
-            while ((bytes = read(descriptor, buffer, BUFFER_SIZE)) > 0) {
+            while ((bytes = read(file_descriptor, buffer, BUFFER_SIZE)) > 0) {
                 write(socket_descriptor, buffer, bytes);
             }
 
+            close(file_descriptor);
             close(socket_descriptor);
         } else {
+            send_http_header(socket_descriptor, 404, NULL);
+        }
+
+    }
+    // Handle text file sending
+    else {
+
+        FILE * file = fopen(file_path, "r");
+
+        if(file != NULL) {
+            send_http_header(socket_descriptor, 200, mime_type);
 
             fseek(file, 0, SEEK_END);
             long bytes_size = ftell(file);
             fseek(file, 0, SEEK_SET);
-
-            send_http_header(socket_descriptor, 200, mime_type);
 
             char * buffer = malloc(bytes_size * sizeof(char));
 
@@ -700,10 +717,10 @@ void send_file(int socket_descriptor, char * file_path, HttpMimeType * mime_type
 
             fclose(file);
             close(socket_descriptor);
-
+        } else {
+            send_http_header(socket_descriptor, 404, NULL);
         }
-    } else {
-        send_http_header(socket_descriptor, 404, NULL);
+
     }
 }
 
