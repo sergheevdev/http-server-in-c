@@ -494,6 +494,15 @@ void *handle_request(void * socket) {
     else {
         int parse_status;
         HttpRequest * httpRequest = parse_http_request(client_message, &parse_status);
+
+        printf("1. Parse parse_status: %d\n", parse_status);
+        if(parse_status == 0) {
+            printf("2. Request method: %s\n", httpRequest->method);
+            printf("3. URI: %s\n", httpRequest->uri);
+            printf("4. Http Version: %s\n", httpRequest->version);
+        }
+        fflush(stdout);
+
         if(parse_status == 0) {
             char * file_path = malloc((strlen(PUBLIC_FOLDER) + strlen(httpRequest->uri)) * sizeof(char));
             strcpy(file_path, PUBLIC_FOLDER);
@@ -536,21 +545,17 @@ void *handle_request(void * socket) {
                 sem_wait(&lock);
                 handle_svg(socket_descriptor, file_path);
                 sem_post(&lock);
+            } else {
+                static const char STATUS_BAD_REQUEST[] = "HTTP/1.1 400 Bad Request\r\n"
+                                                         "Connection: close\r\n\r\n";
+                write(socket_descriptor, STATUS_BAD_REQUEST, strlen(STATUS_BAD_REQUEST));
             }
+
         } else {
             static const char STATUS_BAD_REQUEST[] = "HTTP/1.1 400 Bad Request\r\n"
                                                      "Connection: close\r\n\r\n";
             write(socket_descriptor, STATUS_BAD_REQUEST, strlen(STATUS_BAD_REQUEST));
         }
-
-        printf("1. Parse parse_status: %d\n", parse_status);
-        if(parse_status == 0) {
-            printf("2. Request method: %s\n", httpRequest->method);
-            printf("3. URI: %s\n", httpRequest->uri);
-            printf("4. Http Version: %s\n", httpRequest->version);
-        }
-        fflush(stdout);
-
 
     }
 
