@@ -123,7 +123,6 @@ void free_http_request(HttpRequest * request) {
     free(request);
 }
 
-
 /**
  * Attempts to parse the given message into a http request, performing
  * the necessary validations and checks.
@@ -490,7 +489,15 @@ HttpRequest * parse_http_request(char * message, int * status) {
     return http_request;
 }
 
-
+/**
+ * Returns a pointer to a new allocated <B>HttpMimeType</B> structure, with
+ * all its fields initialized to <I>NULL</I> or its default values.
+ *
+ * The structure and its contents should be freed by the client.
+ *
+ * @return a pointer to a new allocated <B>HttpMimeType</B> structure, or
+ *         <I>NULL</I> if there is no enough space for allocation
+ */
 HttpMimeType * create_http_mime_type() {
     HttpMimeType * mime_type = malloc(sizeof(HttpMimeType));
     if(mime_type == NULL) {
@@ -504,12 +511,20 @@ HttpMimeType * create_http_mime_type() {
     return mime_type;
 }
 
+/**
+ * Frees the given <B>HttpMimeType</B> structure and its contents. If
+ * the given mime type or any of its fields is <I>NULL</I>, no freeing
+ * is performed and that variable is just ignored.
+ *
+ * @param mime_type a pointer to a <B>HttpMimeType</B>
+ */
 void free_http_mime_type(HttpMimeType * mime_type) {
     if(mime_type == NULL) return;
     if(mime_type->extension != NULL) free(mime_type->extension);
     if(mime_type->mime != NULL) free(mime_type->mime);
     free(mime_type);
 }
+
 
 HttpMimeType * from_extension_mime_type(char * extension) {
     if(strcmp("html", extension) == 0) {
