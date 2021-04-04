@@ -753,6 +753,7 @@ void *handle_request(void * socket) {
                 printf("1. Mime extension: %s\n", mime_type->extension);
                 printf("2. Mime value: %s\n", mime_type->mime);
                 printf("3. Is binary: %s\n", mime_type->binary ? "true" : "false");
+                free_http_mime_type(mime_type);
             } else {
                 printf("1. No mime association found\n");
             }
