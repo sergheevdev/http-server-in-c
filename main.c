@@ -404,6 +404,11 @@ HttpRequest * parse_http_request(char * message, int * status) {
         }
 
         http_request->body = body;
+    } else {
+        char * empty = malloc(sizeof(char));
+        (* empty) = '\0';
+
+        http_request->body = empty;
     }
 
     free(to_tokenize);
