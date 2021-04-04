@@ -41,6 +41,16 @@ struct mime {
     bool binary;
 };
 
+
+// GLOBAL VARIABLES
+
+// Keeps track of the current number of connections
+int current_connections = 0;
+
+// Controls threading actions (i.e. no multiple threads accesing disk)
+sem_t lock;
+
+
 /**
  * Returns a pointer to a new allocated <B>HttpHeader</B> structure, with
  * all its fields initialized to <I>NULL</I>.
@@ -579,19 +589,79 @@ HttpMimeType * from_extension_mime_type(char * extension) {
     return NULL;
 }
 
+/**
+ * Returns a new allocated pointer to an <B>array of chars</B> that represents
+ * the concatenation of the two provided strings.
 
-// Keeps track of the current number of connections
-int current_connections = 0;
+ * The returned structure and its contents should be freed by the client.
+ *
+ * @return a pointer to a new allocated <B>array of chars</B> pointer,
+ *         or <I>NULL</I> if there is no enough space for allocation
+ */
+char * concat_strings(char * first, char * second) {
+    char * result = malloc(strlen(first) + strlen(second) + 1);
+    if(result == NULL) {
+        fprintf(stderr, "Failed to allocate memory for string concatenation: %s\n", strerror(errno));
+        fflush(stderr);
+        return NULL;
+    }
+    strcpy(result, first);
+    strcat(result, second);
+    return result;
+}
 
-// Controls threading actions (i.e. no multiple threads accesing disk, concurrent connections amount modification)
-sem_t lock;
+/**
+ * Sends an http header response and status using the specificied socket
+ * descriptor. If the response does not involve sending a file pass
+ * <I>NULL</I> to the mime type.
+ *
+ * @param socket_descriptor the descriptor of a open socket
+ * @param http_status_code an http status code
+ * @param mime_type a mime type that represents the content of a file to be sent
+ *
+ * @return 0 if the sending was successful and 1 otherwise.
+ */
+int send_http_header(int socket_descriptor, int http_status_code, HttpMimeType * mime_type) {
+    if(http_status_code == 200) {
+
+        // I need a variadic function for concatenation or maybe a library
+        // for strings which I don't have right now, when I'll feel like
+        // wanting to suffer I'll code one, but for now we have this messy
+        // concatenation.
+
+        char * response = strdup("HTTP/1.1 200 OK\r\nContent-Type: ");
+        char * concat = concat_strings(response, mime_type->mime);
+        free(response);
+        response = concat_strings(concat, "\r\n\r\n");
+        free(concat);
+
+        send(socket_descriptor, response, strlen(response), 0);
+        free(response);
+
+        return 0;
+    } else if(http_status_code == 400) {
+        char * response = strdup("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+        send(socket_descriptor, response, strlen(response), 0);
+        free(response);
+
+        return 0;
+    } else if(http_status_code == 404) {
+        char * response = strdup("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
+        send(socket_descriptor, response, strlen(response), 0);
+        free(response);
+
+        return 0;
+    } else if(http_status_code == 503) {
+        char * response = strdup("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n");
+        send(socket_descriptor, response, strlen(response), 0);
+        free(response);
+
+        return 0;
+    }
+    return 1;
+}
 
 void handle_html(int socket, char * file_path) {
-
-    static const char STATUS_OK[] = "HTTP/1.1 200 OK\r\n"
-                                    "Content-Type: text/html\r\n\r\n";
-    static const char STATUS_NOT_FOUND[] = "HTTP/1.1 404 Not Found\r\n"
-                                           "Connection: close\r\n\r\n";
 
     FILE * file = fopen(file_path, "r");
     if (file != NULL) {
@@ -601,8 +671,10 @@ void handle_html(int socket, char * file_path) {
         long bytes_size = ftell(file);
         fseek(file, 0, SEEK_SET);
 
-        // Send successful response header
-        send(socket, STATUS_OK, strlen(STATUS_OK), 0);
+        HttpMimeType * mime_type = from_extension_mime_type("html");
+        send_http_header(socket, 200, mime_type);
+        free(mime_type);
+
         char * buffer = malloc(bytes_size * sizeof(char));
 
         // Read the html file straight to the buffer
@@ -618,18 +690,13 @@ void handle_html(int socket, char * file_path) {
     else {
         printf("[Logger] requested html file was not found: %s\n", file_path);
         // If the file does not exist
-        write(socket, STATUS_NOT_FOUND, strlen(STATUS_NOT_FOUND));
+        send_http_header(socket, 404, NULL);
     }
 
     fflush(stdout);
 }
 
 void handle_js(int socket, char * file_path) {
-
-    static const char STATUS_OK[] = "HTTP/1.1 200 OK\r\n"
-                                    "Content-Type: application/javascript\r\n\r\n";
-    static const char STATUS_NOT_FOUND[] = "HTTP/1.1 404 Not Found\r\n"
-                                           "Connection: close\r\n\r\n";
 
     FILE * file = fopen(file_path, "r");
     if (file != NULL) {
@@ -640,7 +707,10 @@ void handle_js(int socket, char * file_path) {
         fseek(file, 0, SEEK_SET);
 
         // Send successful response header
-        send(socket, STATUS_OK, strlen(STATUS_OK), 0);
+        HttpMimeType * mime_type = from_extension_mime_type("js");
+        send_http_header(socket, 200, mime_type);
+        free(mime_type);
+
         char * buffer = malloc(bytes_size * sizeof(char));
 
         // Read the html file straight to the buffer
@@ -656,18 +726,13 @@ void handle_js(int socket, char * file_path) {
     else {
         printf("[Logger] requested js file was not found: %s\n", file_path);
         // If the file does not exist
-        write(socket, STATUS_NOT_FOUND, strlen(STATUS_NOT_FOUND));
+        send_http_header(socket, 404, NULL);
     }
 
     fflush(stdout);
 }
 
 void handle_css(int socket, char * file_path) {
-
-    static const char STATUS_OK[] = "HTTP/1.1 200 OK\r\n"
-                                    "Content-Type: text/css\r\n\r\n";
-    static const char STATUS_NOT_FOUND[] = "HTTP/1.1 404 Not Found\r\n"
-                                           "Connection: close\r\n\r\n";
 
     FILE * file = fopen(file_path, "r");
     if (file != NULL) {
@@ -678,7 +743,10 @@ void handle_css(int socket, char * file_path) {
         fseek(file, 0, SEEK_SET);
 
         // Send successful response header
-        send(socket, STATUS_OK, strlen(STATUS_OK), 0);
+        HttpMimeType * mime_type = from_extension_mime_type("css");
+        send_http_header(socket, 200, mime_type);
+        free(mime_type);
+
         char * buffer = malloc(bytes_size * sizeof(char));
 
         // Read the html file straight to the buffer
@@ -694,7 +762,7 @@ void handle_css(int socket, char * file_path) {
     else {
         printf("[Logger] requested css file was not found: %s\n", file_path);
         // If the file does not exist
-        write(socket, STATUS_NOT_FOUND, strlen(STATUS_NOT_FOUND));
+        send_http_header(socket, 404, NULL);
     }
 
     fflush(stdout);
@@ -702,17 +770,15 @@ void handle_css(int socket, char * file_path) {
 
 void handle_jpeg(int socket, char * file_path) {
 
-    // Available response statuses
-    static const char STATUS_OK[] = "HTTP/1.1 200 OK\r\n"
-                                    "Content-Type: image/jpeg\r\n\r\n";
-    static const char STATUS_NOT_FOUND[] = "HTTP/1.1 404 Not Found\r\n"
-                                           "Connection: close\r\n\r\n";
-
     // Try to open and send the requested binary file
     int descriptor = open(file_path, O_RDONLY);
     if(descriptor > 0) {
         printf("[Logger] requested jpeg file was found: %s\n", file_path);
-        send(socket, STATUS_OK, strlen(STATUS_OK), 0);
+
+        HttpMimeType * mime_type = from_extension_mime_type("jpeg");
+        send_http_header(socket, 200, mime_type);
+        free(mime_type);
+
         char buffer[BUFFER_SIZE];
         int bytes;
         while ((bytes = read(descriptor, buffer, BUFFER_SIZE)) > 0) {
@@ -722,7 +788,7 @@ void handle_jpeg(int socket, char * file_path) {
         printf("[Logger] requested jpeg file was transmitted: %s\n", file_path);
     } else {
         printf("[Logger] requested jpeg file was not found: %s\n", file_path);
-        write(socket, STATUS_NOT_FOUND, strlen(STATUS_NOT_FOUND));
+        send_http_header(socket, 404, NULL);
     }
 
     fflush(stdout);
@@ -730,17 +796,15 @@ void handle_jpeg(int socket, char * file_path) {
 
 void handle_svg(int socket, char * file_path) {
 
-    // Available response statuses
-    static const char STATUS_OK[] = "HTTP/1.1 200 OK\r\n"
-                                    "Content-Type: image/svg+xml\r\n\r\n";
-    static const char STATUS_NOT_FOUND[] = "HTTP/1.1 404 Not Found\r\n"
-                                           "Connection: close\r\n\r\n";
-
     // Try to open and send the requested binary file
     int descriptor = open(file_path, O_RDONLY);
     if(descriptor > 0) {
         printf("[Logger] requested svg file was found: %s\n", file_path);
-        send(socket, STATUS_OK, strlen(STATUS_OK), 0);
+
+        HttpMimeType * mime_type = from_extension_mime_type("svg");
+        send_http_header(socket, 200, mime_type);
+        free(mime_type);
+
         char buffer[BUFFER_SIZE];
         int bytes;
         while ((bytes = read(descriptor, buffer, BUFFER_SIZE)) > 0) {
@@ -750,7 +814,7 @@ void handle_svg(int socket, char * file_path) {
         printf("[Logger] requested svg file was transmitted: %s\n", file_path);
     } else {
         printf("[Logger] requested svg file was not found: %s\n", file_path);
-        write(socket, STATUS_NOT_FOUND, strlen(STATUS_NOT_FOUND));
+        send_http_header(socket, 404, NULL);
     }
 
     fflush(stdout);
@@ -765,11 +829,7 @@ void *handle_request(void * socket) {
 
     // If we run out of available connections reject connection
     if(current_connections + 1 > MAX_CONNECTIONS) {
-        static const char STATUS_UNAVAILABLE[] = "HTTP/1.1 503 Service Unavailable\r\n"
-                                                 "Content-Type: text/html\r\n\r\n"
-                                                 "<!doctype html><html><body>Server is busy.</body></html>";
-        // Send response
-        write(socket_descriptor, STATUS_UNAVAILABLE, strlen(STATUS_UNAVAILABLE));
+        send_http_header(socket_descriptor, 503, NULL);
         sem_post(&lock);
         free(socket);
         shutdown(socket_descriptor, SHUT_RDWR);
@@ -862,17 +922,13 @@ void *handle_request(void * socket) {
                 handle_svg(socket_descriptor, file_path);
                 sem_post(&lock);
             } else {
-                static const char STATUS_BAD_REQUEST[] = "HTTP/1.1 400 Bad Request\r\n"
-                                                         "Connection: close\r\n\r\n";
-                write(socket_descriptor, STATUS_BAD_REQUEST, strlen(STATUS_BAD_REQUEST));
+                send_http_header(socket_descriptor, 400, NULL);
             }
 
             free_http_request(http_request);
 
         } else {
-            static const char STATUS_BAD_REQUEST[] = "HTTP/1.1 400 Bad Request\r\n"
-                                                     "Connection: close\r\n\r\n";
-            write(socket_descriptor, STATUS_BAD_REQUEST, strlen(STATUS_BAD_REQUEST));
+            send_http_header(socket_descriptor, 400, NULL);
         }
 
     }
