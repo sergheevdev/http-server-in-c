@@ -11,6 +11,29 @@
 #include <semaphore.h>
 #include <ctype.h>
 
+/**
+ * A simple HTTP server implementation in C using RFC2616 (https://tools.ietf.org/html/rfc2616).
+ *
+ * <B>FEATURES</B>:
+ * - Static resources serving (capable of serving static file resources like html, css, js, jpeg and svg files).
+ * - Multi-threaded handling of requests.
+ *
+ * <B>TO-DO</B>:
+ * - Fix memory leaks (with valgrind) and ensure all dynamic memory is deallocated when unnecesary.
+ * - Fix multithreading issues to allow multiple threads to perform I/O at the same time.
+ *   (https://docs.oracle.com/cd/E19455-01/806-5257/6je9h033b/index.html)
+ *   "When multiple threads are performing I/O operations at the same time with the same file
+ *   descriptor, you might discover that the traditional UNIX I/O interface is not thread safe."
+ * - Add operative system default MIME file loading in cache or fallback to this software defaults.
+ * - Improve the design and create separate files for responsibilities.
+ * - Add custom handlers that could be loaded to a manager to perform custom route handling (like low level controllers).
+ * - Improve the structures, like header storage by using a hashmap to allow O(1) time complexity for header lookup
+ *   by the given header name.
+ * - Abstract away and use a string library.
+ *
+ * And a lot of more stuff which will probably get refactored whenever I feel like I wanting to suffer :D
+ */
+
 #define PUBLIC_FOLDER "/home/server/public"
 #define PORT_NUMBER 8080
 #define BUFFER_SIZE 4096
