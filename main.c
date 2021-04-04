@@ -183,6 +183,7 @@ HttpRequest * parse_http_request(char * message, int * status) {
     // Valid chars: a-z A-Z 0-9 . - _ ~ ! $ & ' ( ) * + , ; = : @ % /
     traversal = uri;
     bool is_valid_uri = true;
+    char previous_char = '\0';
     while((* traversal) != '\0' && is_valid_uri) {
         is_valid_uri =
                 isalnum((* traversal))
@@ -205,6 +206,9 @@ HttpRequest * parse_http_request(char * message, int * status) {
                 || (* traversal) == '@'
                 || (* traversal) == '%'
                 || (* traversal) == '/';
+        // Prevent two dots in a row (most common vulnerability is trying to access unauthorized dirs with ../../)
+        is_valid_uri = !(previous_char == '.' && previous_char == (* traversal));
+        previous_char = (* traversal);
         traversal++;
     }
 
@@ -219,7 +223,8 @@ HttpRequest * parse_http_request(char * message, int * status) {
 
     request->uri = uri;
 
-    // 3. Parsing the http request protocol version
+    // ## 2. PARSING HTTP REQUEST PROTOCOL VERSION ##
+
     // The "piece" should never freed because it points to the original buffer
     piece = strtok(NULL, " \t\n");
     if(piece == NULL) {
