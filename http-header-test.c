@@ -10,7 +10,7 @@ void assert(int condition, char * message) {
     }
 }
 
-void http_header_create_test_ok() {
+void http_header_create_ok_test() {
     char * name = strdup("Accept");
     char * value = strdup("text/plain");
     HttpHeader * http_header = http_header_create(name, value);
@@ -21,7 +21,7 @@ void http_header_create_test_ok() {
     printf("Test http_header_create_test_ok passed!\n");
 }
 
-void http_header_create_test_name_null() {
+void http_header_create_name_null_test() {
     char * name = NULL;
     char * value = strdup("text/plain");
     HttpHeader * http_header = http_header_create(name, value);
@@ -30,7 +30,7 @@ void http_header_create_test_name_null() {
     printf("Test http_header_create_test_name_null passed!\n");
 }
 
-void http_header_create_test_value_null() {
+void http_header_create_value_null_test() {
     char * name = strdup("Accept");
     char * value = NULL;
     HttpHeader * http_header = http_header_create(name, value);
@@ -39,7 +39,7 @@ void http_header_create_test_value_null() {
     printf("Test http_header_create_test_value_null passed!\n");
 }
 
-void http_header_create_test_all_null() {
+void http_header_create_all_null_test() {
     char * name = NULL;
     char * value = NULL;
     HttpHeader * http_header = http_header_create(name, value);
@@ -67,10 +67,10 @@ void http_header_get_value_test() {
 
 int main() {
     fclose(stderr);
-    http_header_create_test_ok();
-    http_header_create_test_name_null();
-    http_header_create_test_value_null();
-    http_header_create_test_all_null();
+    http_header_create_ok_test();
+    http_header_create_name_null_test();
+    http_header_create_value_null_test();
+    http_header_create_all_null_test();
     http_header_get_name_test();
     http_header_get_value_test();
 }
