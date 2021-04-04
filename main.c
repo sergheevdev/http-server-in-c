@@ -388,28 +388,24 @@ HttpRequest * parse_http_request(char * message, int * status) {
 
     piece = strtok_r(NULL, "", &message_context);
 
-    printf("Body: %s\n", piece);
+    // ## 5. PARSING HTTP REQUEST BODY ##
 
-    /*
-
-*/
-
-/*
-    // ### 4.1 Check if http body is present (the http_request body is optional)  ###
+    // ### 5.1 Check if the body is present ###
     if(piece != NULL) {
         char * body = strdup(piece);
 
-        // ### 4.2 Check piece duplication was successful ###
+        // ### 5.2 Check piece duplication was successful ###
         if(body == NULL) {
             (* status) = NO_MEMORY_CODE;
             free_http_request(http_request);
             free(to_tokenize);
+            free(body);
             return NULL;
         }
 
         http_request->body = body;
     }
-*/
+
     free(to_tokenize);
 
     return http_request;
