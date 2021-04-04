@@ -178,7 +178,7 @@ HttpRequest * parse_http_request(char * message, int * status) {
         return NULL;
     }
 
-    // A basic domain validation is performed, for security concerns and more concrete validations add extra layer
+    // Basic domain and security validations are performed, for security hardening add extra layer of validation
     // @see https://stackoverflow.com/questions/4669692/valid-characters-for-directory-part-of-a-url-for-short-links
     // Valid chars: a-z A-Z 0-9 . - _ ~ ! $ & ' ( ) * + , ; = : @ % /
     traversal = uri;
