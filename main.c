@@ -223,33 +223,40 @@ HttpRequest * parse_http_request(char * message, int * status) {
 
     request->uri = uri;
 
-    // ## 2. PARSING HTTP REQUEST PROTOCOL VERSION ##
+    // ## 3. PARSING HTTP REQUEST PROTOCOL VERSION ##
 
-    // The "piece" should never freed because it points to the original buffer
     piece = strtok(NULL, " \t\n");
+
+    // ### 3.1 Check http version is present  ###
     if(piece == NULL) {
-        // Set invalid format status code because no http protocol version was found in the request
-        (* status) = 5;
-        // Free the allocated resources
+        (* status) = INVALID_FORMAT_CODE;
         free_http_request(request);
         free(to_tokenize);
         return NULL;
     }
 
     char * version = strdup(piece);
-    if(version != NULL) {
 
-        // TODO: Implement http protocol version validation algorithm
-
-        request->version = version;
-    } else {
-        // Set invalid format status code because no memory was available for allocation
-        (* status) = 3;
-        // Free the allocated resources
+    // ### 3.2 Check piece duplication was successful ###
+    if(version == NULL) {
+        (* status) = NO_MEMORY_CODE;
         free_http_request(request);
         free(to_tokenize);
         return NULL;
     }
+
+    bool is_valid_version = strncmp(version, "HTTP/1.1", 8) == 0 || strncmp(version, "HTTP/1.0", 8) == 0;
+
+    // ### 3.3 Ensure http version is allowed ###
+    if(is_valid_version == false) {
+        (* status) = VALIDATION_FAILED_CODE;
+        free_http_request(request);
+        free(to_tokenize);
+        free(version);
+        return NULL;
+    }
+
+    request->version = version;
 
     free(to_tokenize);
 
@@ -485,15 +492,56 @@ void *handle_request(void * socket) {
         printf("[Logger] socket closed because client disconnected unexpectedly\n");
     }
     else {
-        // position 0 -> method
-        // position 1 -> path
-        // position 2 -> protocol version
-        char * parsed_request[3];
-        // printf("%s", client_message);
-
         int parse_status;
-
         HttpRequest * httpRequest = parse_http_request(client_message, &parse_status);
+        if(parse_status == 0) {
+            char * file_path = malloc((strlen(PUBLIC_FOLDER) + strlen(httpRequest->uri)) * sizeof(char));
+            strcpy(file_path, PUBLIC_FOLDER);
+            strcat(file_path, httpRequest->uri);
+
+            char * to_tokenize = strdup(httpRequest->uri);
+            strtok(to_tokenize, ".");
+            char * extension = strtok(NULL, ".");
+
+            if (strcmp(extension, "html") == 0) {
+                // Prevent multiple threads access disk at the same time
+                sem_wait(&lock);
+                handle_html(socket_descriptor, file_path);
+                sem_post(&lock);
+            }
+            else if (strcmp(extension, "css") == 0) {
+
+                // Prevent multiple threads access disk at the same time
+                sem_wait(&lock);
+                handle_css(socket_descriptor, file_path);
+                sem_post(&lock);
+            }
+            else if (strcmp(extension, "js") == 0) {
+
+                // Prevent multiple threads access disk at the same time
+                sem_wait(&lock);
+                handle_js(socket_descriptor, file_path);
+                sem_post(&lock);
+            }
+            else if (strcmp(extension, "jpeg") == 0) {
+
+                // Prevent multiple threads access disk at the same time
+                sem_wait(&lock);
+                handle_jpeg(socket_descriptor, file_path);
+                sem_post(&lock);
+            }
+            else if (strcmp(extension, "svg") == 0) {
+
+                // Prevent multiple threads access disk at the same time
+                sem_wait(&lock);
+                handle_svg(socket_descriptor, file_path);
+                sem_post(&lock);
+            }
+        } else {
+            static const char STATUS_BAD_REQUEST[] = "HTTP/1.1 400 Bad Request\r\n"
+                                                     "Connection: close\r\n\r\n";
+            write(socket_descriptor, STATUS_BAD_REQUEST, strlen(STATUS_BAD_REQUEST));
+        }
 
         printf("1. Parse parse_status: %d\n", parse_status);
         if(parse_status == 0) {
@@ -503,105 +551,7 @@ void *handle_request(void * socket) {
         }
         fflush(stdout);
 
-        parsed_request[0] = strtok(client_message, " \t\n");
-        // Only accept GET method
-        if (strncmp(parsed_request[0], "GET\0", 4) == 0) {
 
-            // Parse the request header
-            parsed_request[1] = strtok(NULL, " \t");
-            parsed_request[2] = strtok(NULL, " \t\n");
-
-            // Ensure http protocol version is 1.0 or 1.1
-            if (strncmp(parsed_request[2], "HTTP/1.1", 8) != 0) {
-                static const char STATUS_BAD_REQUEST[] = "HTTP/1.1 400 Bad Request\r\n"
-                                                         "Connection: close\r\n\r\n";
-                write(socket_descriptor, STATUS_BAD_REQUEST, strlen(STATUS_BAD_REQUEST));
-            }
-            else {
-                // Parse the filename and extension
-                char * tokens[2];
-                char * file_name = malloc(strlen(parsed_request[1]) * sizeof(char));
-                strcpy(file_name, parsed_request[1]);
-
-                // Getting the file name and extension from tokenizer
-                tokens[0] = strtok(file_name, ".");
-                tokens[1] = strtok(NULL, ".");
-
-                // Ignore favicon requests
-                if(strcmp(tokens[0], "/favicon") == 0 && strcmp(tokens[1], "ico") != 0) {
-                    sem_wait(&lock);
-                    current_connections--;
-                    sem_post(&lock);
-                    free(socket);
-                    shutdown(socket_descriptor, SHUT_RDWR);
-                    close(socket_descriptor);
-                    socket_descriptor = -1;
-                    pthread_exit(NULL);
-                }
-                // If no path was provided or just "/"
-                else if (tokens[0] == NULL || tokens[1] == NULL) {
-                    static const char STATUS_BAD_REQUEST[] = "HTTP/1.1 400 Bad Request\r\n"
-                                                             "Connection: close\r\n\r\n";
-                    write(socket_descriptor, STATUS_BAD_REQUEST, strlen(STATUS_BAD_REQUEST));
-                } else {
-                    // If the requested file is not html, js or jpeg, send bad request response parse_status
-                    if (strcmp(tokens[1], "html") != 0 && strcmp(tokens[1], "css") != 0
-                        && strcmp(tokens[1], "js") != 0 && strcmp(tokens[1], "jpeg") != 0
-                        && strcmp(tokens[1], "svg") != 0) {
-                        static const char STATUS_BAD_REQUEST[] = "HTTP/1.1 400 Bad Request\r\n"
-                                                                 "Connection: close\r\n\r\n";
-                        write(socket_descriptor, STATUS_BAD_REQUEST, strlen(STATUS_BAD_REQUEST));
-                    }
-                    else {
-                        // Merge the file name that was requested with the public folder as root directory
-                        char * file_path = malloc((strlen(PUBLIC_FOLDER) + strlen(parsed_request[1])) * sizeof(char));
-                        strcpy(file_path, PUBLIC_FOLDER);
-                        strcat(file_path, parsed_request[1]);
-
-                        if (strcmp(tokens[1], "html") == 0) {
-
-                            // Prevent multiple threads access disk at the same time
-                            sem_wait(&lock);
-                            handle_html(socket_descriptor, file_path);
-                            sem_post(&lock);
-                        }
-                        else if (strcmp(tokens[1], "css") == 0) {
-
-                            // Prevent multiple threads access disk at the same time
-                            sem_wait(&lock);
-                            handle_css(socket_descriptor, file_path);
-                            sem_post(&lock);
-                        }
-                        else if (strcmp(tokens[1], "js") == 0) {
-
-                            // Prevent multiple threads access disk at the same time
-                            sem_wait(&lock);
-                            handle_js(socket_descriptor, file_path);
-                            sem_post(&lock);
-                        }
-                        else if (strcmp(tokens[1], "jpeg") == 0) {
-
-                            // Prevent multiple threads access disk at the same time
-                            sem_wait(&lock);
-                            handle_jpeg(socket_descriptor, file_path);
-                            sem_post(&lock);
-                        }
-                        else if (strcmp(tokens[1], "svg") == 0) {
-
-                            // Prevent multiple threads access disk at the same time
-                            sem_wait(&lock);
-                            handle_svg(socket_descriptor, file_path);
-                            sem_post(&lock);
-                        }
-
-                        // Free the requested file path
-                        free(file_path);
-                    }
-                }
-                free(file_name);
-            }
-
-        }
     }
 
     // Close connection and finish thread
