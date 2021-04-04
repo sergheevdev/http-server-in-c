@@ -132,6 +132,8 @@ void free_http_request(HttpRequest * request) {
  * @param status the result status code of the parsing
  *
  * @return a new allocated pointer with the parsed <B>HttpRequest</B>
+ *         or <I>NULL</I> if there is no enough space for allocation,
+ *         or the validation or parsing failed
  */
 HttpRequest * parse_http_request(char * message, int * status) {
 
