@@ -17,7 +17,6 @@
 #define BUFFER_SIZE 4096
 #define MAX_CONNECTIONS 10
 
-typedef enum method HttpMethod;
 typedef struct header HttpHeader;
 typedef struct request HttpRequest;
 
@@ -32,7 +31,7 @@ struct request {
     char * uri;
     char * version;
     struct header * headers;
-    void * body;
+    char * body;
 };
 
 void free_http_header(HttpHeader * header) {
@@ -55,6 +54,18 @@ void free_http_request(HttpRequest * request) {
     }
     if(request->body != NULL) free(request->body);
     free(request);
+}
+
+HttpHeader * create_http_header() {
+    HttpHeader * header = malloc(sizeof(HttpHeader));
+    if(header == NULL) {
+        fprintf(stderr, "Failed to allocate memory for http header: %s\n", strerror(errno));
+        fflush(stderr);
+        return NULL;
+    }
+    header->name = NULL;
+    header->value = NULL;
+    return header;
 }
 
 HttpRequest * create_http_request() {
@@ -86,8 +97,8 @@ HttpRequest * parse_http_request(char * message, int * status) {
     // Set default return code to: successful
     (* status) = SUCCESS_CODE;
 
-    HttpRequest * request = create_http_request();
-    if(request == NULL) {
+    HttpRequest * http_request = create_http_request();
+    if(http_request == NULL) {
         (* status) = NO_MEMORY_CODE;
         return NULL;
     }
@@ -97,12 +108,13 @@ HttpRequest * parse_http_request(char * message, int * status) {
 
     // ## 1. PARSING HTTP REQUEST METHOD ##
 
-    char * piece = strtok(to_tokenize, " \t\n");
+    char * message_context = to_tokenize;
+    char * piece = strtok_r(to_tokenize, " \t\n", &message_context);
 
     // ### 1.1 Check http method is present  ###
     if(piece == NULL) {
         (* status) = INVALID_FORMAT_CODE;
-        free_http_request(request);
+        free_http_request(http_request);
         free(to_tokenize);
         return NULL;
     }
@@ -112,7 +124,7 @@ HttpRequest * parse_http_request(char * message, int * status) {
     // ### 1.2 Check piece duplication was successful ###
     if(method == NULL) {
         (* status) = NO_MEMORY_CODE;
-        free_http_request(request);
+        free_http_request(http_request);
         free(to_tokenize);
         return NULL;
     }
@@ -128,7 +140,7 @@ HttpRequest * parse_http_request(char * message, int * status) {
     // If size exceeds longest valid method name size given input is invalid
     if(size < 3 || size > 7) {
         (* status) = VALIDATION_FAILED_CODE;
-        free_http_request(request);
+        free_http_request(http_request);
         free(to_tokenize);
         free(method);
         return NULL;
@@ -148,32 +160,34 @@ HttpRequest * parse_http_request(char * message, int * status) {
     // ### 1.4 Ensure http method is a valid defined method in rfc2616 ###
     if(is_valid_method == false) {
         (* status) = VALIDATION_FAILED_CODE;
-        free_http_request(request);
+        free_http_request(http_request);
         free(to_tokenize);
         free(method);
         return NULL;
     }
 
-    request->method = method;
+    http_request->method = method;
 
     // ## 2. PARSING HTTP REQUEST URI ##
 
-    piece = strtok(NULL, " \t");
+    piece = strtok_r(NULL, " \t", &message_context);
 
     // ### 2.1 Check http uri is present  ###
     if(piece == NULL) {
         (* status) = INVALID_FORMAT_CODE;
-        free_http_request(request);
+        free_http_request(http_request);
         free(to_tokenize);
         return NULL;
     }
 
     char * uri = strdup(piece);
 
+    printf("Var %s\n", uri);
+
     // ### 2.2 Check piece duplication was successful ###
     if(uri == NULL) {
         (* status) = NO_MEMORY_CODE;
-        free_http_request(request);
+        free_http_request(http_request);
         free(to_tokenize);
         return NULL;
     }
@@ -215,22 +229,22 @@ HttpRequest * parse_http_request(char * message, int * status) {
     // ### 2.3 Ensure http path components are valid ###
     if(is_valid_uri == false) {
         (* status) = VALIDATION_FAILED_CODE;
-        free_http_request(request);
+        free_http_request(http_request);
         free(to_tokenize);
         free(uri);
         return NULL;
     }
 
-    request->uri = uri;
+    http_request->uri = uri;
 
     // ## 3. PARSING HTTP REQUEST PROTOCOL VERSION ##
 
-    piece = strtok(NULL, " \t\n");
+    piece = strtok_r(NULL, " \t\n", &message_context);
 
     // ### 3.1 Check http version is present  ###
     if(piece == NULL) {
         (* status) = INVALID_FORMAT_CODE;
-        free_http_request(request);
+        free_http_request(http_request);
         free(to_tokenize);
         return NULL;
     }
@@ -240,7 +254,7 @@ HttpRequest * parse_http_request(char * message, int * status) {
     // ### 3.2 Check piece duplication was successful ###
     if(version == NULL) {
         (* status) = NO_MEMORY_CODE;
-        free_http_request(request);
+        free_http_request(http_request);
         free(to_tokenize);
         return NULL;
     }
@@ -250,17 +264,155 @@ HttpRequest * parse_http_request(char * message, int * status) {
     // ### 3.3 Ensure http version is allowed ###
     if(is_valid_version == false) {
         (* status) = VALIDATION_FAILED_CODE;
-        free_http_request(request);
+        free_http_request(http_request);
         free(to_tokenize);
         free(version);
         return NULL;
     }
 
-    request->version = version;
+    http_request->version = version;
 
+    // ## 4. PARSING HTTP REQUEST HEADERS ##
+
+    piece = strtok_r(NULL, "\t\n", &message_context);
+
+    // While there are more headers and no http_request body starting character is found
+    while(piece != NULL && strcmp("\r", piece) != 0) {
+
+        char * header = strdup(piece);
+
+        // ### 4.1 Check piece duplication was successful ###
+        if(header == NULL) {
+            (* status) = NO_MEMORY_CODE;
+            free_http_request(http_request);
+            free(to_tokenize);
+            return NULL;
+        }
+
+        // Check header should have only one separator and should be ": "
+        int separator_appearances = 0;
+        traversal = header;
+        previous_char = '\0';
+        while((* traversal) != '\0') {
+            if(previous_char == ':' && (* traversal) == ' ') {
+                separator_appearances++;
+            }
+            previous_char = (* traversal);
+            traversal++;
+        }
+
+        // ### 4.2 Validate header has only one separator ###
+        bool is_not_header = separator_appearances != 1;
+        if(is_not_header) {
+            (* status) = VALIDATION_FAILED_CODE;
+            free_http_request(http_request);
+            free(to_tokenize);
+            free(header);
+            return NULL;
+        }
+
+        // ### 4.3 Ensure header structure allocation was successful ###
+        HttpHeader * http_header = create_http_header();
+        if(http_header == NULL) {
+            (* status) = NO_MEMORY_CODE;
+            free_http_request(http_request);
+            free(to_tokenize);
+            free(header);
+            return NULL;
+        }
+
+        char * header_context = header;
+        char * header_piece = strtok_r(piece, ":", &header_context);
+
+        char * header_name = strdup(header_piece);
+
+        // ### 4.4 Ensure header name duplication was successful ###
+        if(header_name == NULL) {
+            (* status) = NO_MEMORY_CODE;
+            free_http_request(http_request);
+            free(to_tokenize);
+            free(header);
+            return NULL;
+        }
+
+        // Check header name contains only: "a-z", "A-Z", "-" characters
+        traversal = header_name;
+        bool is_header_name_valid = true;
+        while((* traversal) != '\0' && is_header_name_valid) {
+            is_header_name_valid =
+                   ((* traversal) >= 'a' && (* traversal) <= 'z')  // Is lowecase letter
+                || ((* traversal) >= 'A' && (* traversal) <= 'Z')  // Is uppercase letter
+                || ((* traversal) == '-');                         // Standard word separator
+            traversal++;
+        }
+
+        // ### 4.5 Ensure header name is valid ###
+        if(!is_header_name_valid) {
+            (* status) = VALIDATION_FAILED_CODE;
+            free_http_request(http_request);
+            free_http_header(http_header);
+            free(to_tokenize);
+            free(header);
+            free(header_name);
+            return NULL;
+        }
+
+        http_header->name = header_name;
+
+        header_piece = strtok_r(NULL, " ", &header_context);
+
+        char * header_value = strdup(header_piece);
+
+        // ### 4.6 Ensure header value duplication was successful ###
+        if(header_value == NULL) {
+            (* status) = NO_MEMORY_CODE;
+            free_http_request(http_request);
+            free_http_header(http_header);
+            free(to_tokenize);
+            free(header);
+            free(header_name);
+            return NULL;
+        }
+
+        http_header->value = header_value;
+
+        // Add http header to headers linked list in the http request
+        HttpHeader * previous_header = http_request->headers;
+        http_header->next = previous_header;
+        http_request->headers = http_header;
+
+        free(header);
+
+        piece = strtok_r(NULL, "\t\n", &message_context);
+    }
+
+    piece = strtok_r(NULL, "", &message_context);
+
+    printf("Body: %s\n", piece);
+
+    /*
+
+*/
+
+/*
+    // ### 4.1 Check if http body is present (the http_request body is optional)  ###
+    if(piece != NULL) {
+        char * body = strdup(piece);
+
+        // ### 4.2 Check piece duplication was successful ###
+        if(body == NULL) {
+            (* status) = NO_MEMORY_CODE;
+            free_http_request(http_request);
+            free(to_tokenize);
+            return NULL;
+        }
+
+        http_request->body = body;
+    }
+*/
     free(to_tokenize);
 
-    return request;
+    return http_request;
 }
 
 
@@ -500,6 +652,7 @@ void *handle_request(void * socket) {
             printf("2. Request method: %s\n", httpRequest->method);
             printf("3. URI: %s\n", httpRequest->uri);
             printf("4. Http Version: %s\n", httpRequest->version);
+            printf("5. Body: %s\n", httpRequest->body);
         }
         fflush(stdout);
 
