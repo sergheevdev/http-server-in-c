@@ -45,7 +45,7 @@ struct mime {
  * Returns a pointer to a new allocated <B>HttpHeader</B> structure, with
  * all its fields initialized to <I>NULL</I>.
  *
- * The structure and its contents should be freed by the client.
+ * The returned structure and its contents should be freed by the client.
  *
  * @return a pointer to a new allocated <B>HttpHeader</B> structure, or
  *         <I>NULL</I> if there is no enough space for allocation
@@ -80,7 +80,7 @@ void free_http_header(HttpHeader * header) {
  * Returns a pointer to a new allocated <B>HttpRequest</B> structure, with
  * all its fields initialized to <I>NULL</I>.
  *
- * The structure and its contents should be freed by the client.
+ * The returned structure and its contents should be freed by the client.
  *
  * @return a pointer to a new allocated <B>HttpRequest</B> structure, or
  *         <I>NULL</I> if there is no enough space for allocation
@@ -127,7 +127,7 @@ void free_http_request(HttpRequest * request) {
  * Attempts to parse the given message into a http request, performing
  * the necessary validations and checks.
  *
- * The structure and its contents should be freed by the client.
+ * The returned structure and its contents should be freed by the client.
  *
  * @param message an http message to be parsed
  * @param status the result status code of the parsing
@@ -493,7 +493,7 @@ HttpRequest * parse_http_request(char * message, int * status) {
  * Returns a pointer to a new allocated <B>HttpMimeType</B> structure, with
  * all its fields initialized to <I>NULL</I> or its default values.
  *
- * The structure and its contents should be freed by the client.
+ * The returned structure and its contents should be freed by the client.
  *
  * @return a pointer to a new allocated <B>HttpMimeType</B> structure, or
  *         <I>NULL</I> if there is no enough space for allocation
@@ -529,7 +529,7 @@ void free_http_mime_type(HttpMimeType * mime_type) {
  * Returns a pointer to a new allocated <B>HttpMimeType</B> structure,
  * with all the MIME type information of a given extension.
  *
- * The structure and its contents should be freed by the client.
+ * The returned structure and its contents should be freed by the client.
  *
  * @return a pointer to a new allocated <B>HttpMimeType</B> structure,
  *         or <I>NULL</I> if there is no enough space for allocation,
