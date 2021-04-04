@@ -6,7 +6,7 @@
 void assert(int condition, char * message) {
     if(condition != 1) {
         printf("%s\n", message);
-        abort();
+        exit(1);
     }
 }
 
@@ -26,6 +26,17 @@ void http_header_create_name_null_test() {
     char * value = strdup("text/plain");
     HttpHeader * http_header = http_header_create(name, value);
     assert(http_header == NULL, "[http_header_create_test_name_null] Expected: http_header == NULL");
+    free(value);
+    printf("Test http_header_create_test_name_null passed!\n");
+}
+
+void http_header_create_name_invalid_test() {
+    // Forced on purpose invalid header name containing "#" invalid character
+    char * name = strdup("Strange#Header-Name");
+    char * value = strdup("text/plain");
+    HttpHeader * http_header = http_header_create(name, value);
+    assert(http_header == NULL, "[http_header_create_name_invalid_test] Expected: http_header == NULL");
+    free(name);
     free(value);
     printf("Test http_header_create_test_name_null passed!\n");
 }
@@ -69,6 +80,7 @@ int main() {
     fclose(stderr);
     http_header_create_ok_test();
     http_header_create_name_null_test();
+    http_header_create_name_invalid_test();
     http_header_create_value_null_test();
     http_header_create_all_null_test();
     http_header_get_name_test();
