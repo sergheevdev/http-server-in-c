@@ -408,6 +408,17 @@ HttpRequest * parse_http_request(char * message, int * status) {
 
         // ### 5.3 Assign empty string when body not present ###
         char * empty = malloc(sizeof(char));
+
+        // ### 5.4 Error handling for failed memory allocation ###
+        if(empty == NULL) {
+            fprintf(stderr, "Failed to allocate memory for http empty body: %s\n", strerror(errno));
+            fflush(stderr);
+            (* status) = NO_MEMORY_CODE;
+            free_http_request(http_request);
+            free(to_tokenize);
+            return NULL;
+        }
+
         (* empty) = '\0';
 
         http_request->body = empty;
