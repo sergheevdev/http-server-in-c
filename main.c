@@ -11,8 +11,7 @@
 #include <semaphore.h>
 #include <ctype.h>
 
-//#define PUBLIC_FOLDER "/home/server/public"
-#define PUBLIC_FOLDER "/home/sscid/sources"
+#define PUBLIC_FOLDER "/home/server/public"
 #define PORT_NUMBER 8080
 #define BUFFER_SIZE 4096
 #define MAX_CONNECTIONS 20
