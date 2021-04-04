@@ -15,7 +15,7 @@
 #define PUBLIC_FOLDER "/home/sscid/sources"
 #define PORT_NUMBER 8080
 #define BUFFER_SIZE 4096
-#define MAX_CONNECTIONS 10
+#define MAX_CONNECTIONS 20
 
 typedef struct header HttpHeader;
 typedef struct request HttpRequest;
@@ -724,7 +724,14 @@ void send_file(int socket_descriptor, char * file_path, HttpMimeType * mime_type
     }
 }
 
-void *handle_request(void * socket) {
+/**
+ * Handles the client request and sends a response.
+ *
+ * @param socket an open socket to whom send a response.
+ *
+ * @return a pointer to this method
+ */
+void * handle_request(void * socket) {
 
     // Get the socket descriptor.
     int socket_descriptor = * ((int *)socket);
@@ -746,49 +753,66 @@ void *handle_request(void * socket) {
 
     sem_post(&lock);
 
-    // Obtain the request
     char client_message[BUFFER_SIZE];
+
+    // Read the entire client message to the buffer
     int request = recv(socket_descriptor, client_message, BUFFER_SIZE, 0);
 
     if(request < 0) {
-        printf("[Logger] socket message reception failed\n");
+        printf("[Server] Client message reception failed\n");
     }
     else if (request == 0) {
-        printf("[Logger] socket closed because client disconnected unexpectedly\n");
+        printf("[Server] Client disconnected unexpectedly and closed the connection\n");
     }
     else {
         int parse_status;
         HttpRequest * http_request = parse_http_request(client_message, &parse_status);
 
+        // Printing status to the console
         printf("\n");
         printf("1. Parse parse_status: %d\n", parse_status);
         if(parse_status == 0) {
             printf("2. Request method: %s\n", http_request->method);
             printf("3. URI: %s\n", http_request->uri);
             printf("4. Http Version: %s\n", http_request->version);
-            printf("5. Body: %s\n", http_request->body);
+            printf("5. Http Headers:\n");
+            HttpHeader * header = http_request->headers;
+            while(header != NULL) {
+                printf("   - %s : %s\n", header->name, header->value);
+                header = header->next;
+            }
+            printf("6. Body: %s\n", http_request->body);
+
         }
         printf("\n");
         fflush(stdout);
+        // END
 
+        // If the parsing was successful
         if(parse_status == 0) {
+
+            // Concat the requested file path with the public resources folder
             char * file_path = malloc((strlen(PUBLIC_FOLDER) + strlen(http_request->uri)) * sizeof(char));
             strcpy(file_path, PUBLIC_FOLDER);
             strcat(file_path, http_request->uri);
 
+            // Extract the extension of the requested file
             char * to_tokenize = strdup(http_request->uri);
             strtok(to_tokenize, ".");
             char * extension = strtok(NULL, ".");
 
+            // Extract the MIME information using the extracted file extension
             HttpMimeType * mime_type = from_extension_mime_type(extension);
             if(mime_type != NULL) {
                 sem_wait(&lock);
+                // Send the file to the client or an error response if file was not found
                 send_file(socket_descriptor, file_path, mime_type);
                 sem_post(&lock);
             } else {
                 send_http_header(socket_descriptor, 400, NULL);
             }
 
+            // Free allocated resources
             free(file_path);
             free(to_tokenize);
             free_http_mime_type(mime_type);
@@ -837,7 +861,7 @@ int main(int argc, char *argv[]) {
         fflush(stdout);
         return 1;
     }
-    listen(socket_descriptor, 50);
+    listen(socket_descriptor, MAX_CONNECTIONS);
 
     printf("[Server] Waiting for incoming connections...\n");
     fflush(stdout);
