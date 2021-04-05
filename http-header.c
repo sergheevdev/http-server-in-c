@@ -15,7 +15,7 @@ HttpHeader * http_header_create(char * name, char * value) {
         fprintf(stderr, "Provided value to http_header_create must not be NULL\n");
         return NULL;
     }
-    if(!http_header_is_valid_name(name)) {
+    if(http_header_is_valid_name(name) == false) {
         fprintf(stderr, "Provided name to http_header_create is not valid\n");
         return NULL;
     }
