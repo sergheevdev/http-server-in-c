@@ -1,10 +1,13 @@
 #include "http-header.h"
+#include "http-validator.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <ctype.h>
 
 bool http_header_is_valid_name(char * name);
+bool http_header_is_valid_value(char * value);
 
 HttpHeader * http_header_create(char * name, char * value) {
     if(name == NULL) {
@@ -17,6 +20,10 @@ HttpHeader * http_header_create(char * name, char * value) {
     }
     if(http_header_is_valid_name(name) == false) {
         fprintf(stderr, "Provided name to http_header_create is not valid\n");
+        return NULL;
+    }
+    if(http_header_is_valid_value(value) == false) {
+        fprintf(stderr, "Provided value to http_header_create is not valid\n");
         return NULL;
     }
     HttpHeader * http_header = malloc(sizeof(HttpHeader));
@@ -33,10 +40,17 @@ bool http_header_is_valid_name(char * name) {
     bool is_valid = true;
     char * current_char = name;
     while((*current_char) != '\0' && is_valid) {
-        is_valid =
-            ((* current_char) >= 'a' && (* current_char) <= 'z')
-            || ((* current_char) >= 'A' && (* current_char) <= 'Z')
-            || ((* current_char) == '-');
+        is_valid = http_validator_is_token((* current_char));
+        current_char++;
+    }
+    return is_valid;
+}
+
+bool http_header_is_valid_value(char * value) {
+    bool is_valid = true;
+    char * current_char = value;
+    while((*current_char) != '\0' && is_valid) {
+        is_valid = iscntrl((* current_char)) == false;
         current_char++;
     }
     return is_valid;
