@@ -31,8 +31,8 @@ void http_header_create_name_null_test() {
 }
 
 void http_header_create_name_invalid_test() {
-    // Forced on purpose invalid header name containing "#" invalid character
-    char * name = strdup("Strange#Header-Name");
+    // Forced on purpose invalid header name containing invalid character
+    char * name = strdup("\x01\x02\x03\x04");
     char * value = strdup("text/plain");
     HttpHeader * http_header = http_header_create(name, value);
     assert(http_header == NULL, "[http_header_create_name_invalid_test] Expected: http_header == NULL");
