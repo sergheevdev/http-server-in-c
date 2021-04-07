@@ -12,7 +12,15 @@ void assert(int condition, char * message) {
 
 void http_header_create_ok_test() {
     char * name = strdup("Accept");
+    if(name == NULL) {
+        fprintf(stderr, "[http_header_create_ok_test] Fatal: Unable to allocate memory for the name variable");
+        exit(1);
+    }
     char * value = strdup("text/plain");
+    if(value == NULL) {
+        fprintf(stderr, "[http_header_create_ok_test] Fatal: Unable to allocate memory for the value variable");
+        exit(1);
+    }
     HttpHeader * http_header = http_header_create(name, value);
     assert(http_header != NULL, "[http_header_create_test_ok] Expected: http_header != NULL");
     assert(name == http_header->name, "[http_header_create_test_ok] Expected: name == http_header->name");
@@ -24,6 +32,10 @@ void http_header_create_ok_test() {
 void http_header_create_name_null_test() {
     char * name = NULL;
     char * value = strdup("text/plain");
+    if(value == NULL) {
+        fprintf(stderr, "[http_header_create_name_null_test] Fatal: Unable to allocate memory for the value variable");
+        exit(1);
+    }
     HttpHeader * http_header = http_header_create(name, value);
     assert(http_header == NULL, "[http_header_create_test_name_null] Expected: http_header == NULL");
     free(value);
@@ -33,7 +45,15 @@ void http_header_create_name_null_test() {
 void http_header_create_name_invalid_test() {
     // Forced on purpose invalid header name containing invalid character
     char * name = strdup("\x01\x02\x03\x04");
+    if(name == NULL) {
+        fprintf(stderr, "[http_header_create_name_invalid_test] Fatal: Unable to allocate memory for the name variable");
+        exit(1);
+    }
     char * value = strdup("text/plain");
+    if(value == NULL) {
+        fprintf(stderr, "[http_header_create_name_invalid_test] Fatal: Unable to allocate memory for the value variable");
+        exit(1);
+    }
     HttpHeader * http_header = http_header_create(name, value);
     assert(http_header == NULL, "[http_header_create_name_invalid_test] Expected: http_header == NULL");
     free(name);
@@ -43,9 +63,13 @@ void http_header_create_name_invalid_test() {
 
 void http_header_create_value_null_test() {
     char * name = strdup("Accept");
+    if(name == NULL) {
+        fprintf(stderr, "[http_header_create_value_null_test] Fatal: Unable to allocate memory for the name variable");
+        exit(1);
+    }
     char * value = NULL;
     HttpHeader * http_header = http_header_create(name, value);
-    assert(http_header == NULL, "[http_header_create_test_value_null] Expected: http_header == NULL");
+    assert(http_header == NULL, "[http_header_create_value_null_test] Expected: http_header == NULL");
     free(name);
     printf("Test http_header_create_test_value_null passed!\n");
 }
@@ -60,7 +84,15 @@ void http_header_create_all_null_test() {
 
 void http_header_get_name_test() {
     char * name = strdup("Accept");
+    if(name == NULL) {
+        fprintf(stderr, "[http_header_get_name_test] Fatal: Unable to allocate memory for the name variable");
+        exit(1);
+    }
     char * value = strdup("text/plain");
+    if(value == NULL) {
+        fprintf(stderr, "[http_header_get_name_test] Fatal: Unable to allocate memory for the value variable");
+        exit(1);
+    }
     HttpHeader * http_header = http_header_create(name, value);
     assert(strcmp(http_header->name, name) == 0, "[http_header_get_name_test] Expected: http_header->name === name");
     http_header_free(http_header);
@@ -69,7 +101,15 @@ void http_header_get_name_test() {
 
 void http_header_get_value_test() {
     char * name = strdup("Accept");
+    if(name == NULL) {
+        fprintf(stderr, "[http_header_get_value_test] Fatal: Unable to allocate memory for the name variable");
+        exit(1);
+    }
     char * value = strdup("text/plain");
+    if(value == NULL) {
+        fprintf(stderr, "[http_header_get_value_test] Fatal: Unable to allocate memory for the value variable");
+        exit(1);
+    }
     HttpHeader * http_header = http_header_create(name, value);
     assert(strcmp(http_header->value, value) == 0, "[http_header_get_value_test] Expected: http_header->value === value");
     http_header_free(http_header);
