@@ -1,5 +1,5 @@
 #include "http-header.h"
-#include "../../validator/http-validator.h"
+#include "../http-validator.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
