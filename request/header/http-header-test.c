@@ -24,7 +24,7 @@ void http_header_create_ok_test() {
     HttpHeader * http_header = http_header_create(name, value);
     assert(http_header != NULL, "Expected: http_header != NULL", __func__);
     assert(name == http_header->name, "Expected: name == http_header->name", __func__);
-    assert(value == http_header->value, "Expected: name == http_header->name", __func__);
+    assert(value == http_header->value, "Expected: value == http_header->value", __func__);
     http_header_free(http_header);
     printf("Test %s passed!\n", __func__);
 }
