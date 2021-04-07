@@ -2,34 +2,35 @@
 
 [![MIT License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](https://github.com/sergheevdev/http-server-in-c/blob/main/LICENSE)
 
-## Introduction
+**This branch is a work in progress**
 
-**Simple HTTP Server**: is a simple HTTP server implementation attempt in C trying to apply the [RFC2616](https://tools.ietf.org/html/rfc2616) standard.
+Nothing stable in here... only unit tests and readable code
 
-## Features
-- Static resources serving (capable of serving static file resources like html, css, js, jpeg and svg files).
-- Multi-threaded handling of requests.
+## TODO
 
-### Warning
-- This web server is not production ready, bug free, nor memory leaks free.
-- This implementation was just coded for fun, not intendeed to be really efficient.
-- The design of the structures and general domain is not the best.
-- Memory leaks are present in the current implementation (will be fixed soon).
+Common:
 
-### Story
+- Create http version element
 
-This project started as a coding kata for implementing a really simple web server to see
-the inner workings of sockets and how the HTTP protocol is implemented.
+Request:
 
-## Getting started
+- Create elements that compose the http request
+- Create an http request builder
+- Create an http request parses that builds up the request
+- Create a header that represents http methods enumeration (RFC2616 methods)
 
-1. Clone the repository to your local computer.
-2. Add execution permissions to **compile.sh**.
-3. Run the script.
-4. Enjoy our new vulnerable but fast http server :D!
+Response:
 
-**NOTE**: make sure you have the **gcc** essential compilation packages installed and also **valgrind** (used to check memory leaks)
+- Create elements that compose the http response
+- Create a header that represents http response statuses enumeration (RFC 2616 statuses)
 
-## License
+Basic idea:
 
-[MIT](LICENSE) &copy; Serghei Sergheev
+1. Http Server -> Http Request Parser (Parse the request)
+2. Http Server -> Http Router (Pass the request to the router)
+3. Http Router -> Http Handler Manager (Routes passes to the handlers manager)
+
+The Handler Manager will contain all the registered handlers
+
+Create some default handlers like static content delivery and let developers create their own high level layer
+and handle that to some controllers but wrapped in high level decorated "classes", well, here structures.
