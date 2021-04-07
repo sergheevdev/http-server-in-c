@@ -17,7 +17,7 @@ void http_method_ok_test() {
         fprintf(stderr, "[%s] Fatal: Unable to allocate memory for the http_method variable", __func__);
         exit(1);
     }
-    assert(http_method != NULL, "[http_method_ok] Expected: http_method != NULL", __func__);
+    assert(http_method != NULL, "[%s] Expected: http_method != NULL", __func__);
     free(input);
     free(http_method);
     printf("Test %s passed!\n", __func__);
