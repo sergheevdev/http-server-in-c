@@ -38,7 +38,7 @@ bool http_validator_is_separator(char character) {
 }
 
 bool http_validator_is_token(char character) {
-    return http_validator_is_separator(character) == false &&
-           iscntrl(character) == false &&
+    return !http_validator_is_separator(character) &&
+           !iscntrl(character) &&
            character != 127;
 }
