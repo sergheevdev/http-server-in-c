@@ -63,10 +63,10 @@ void http_header_free(HttpHeader * header) {
     free(header);
 }
 
-const char * http_header_get_name(HttpHeader * header) {
+const char * http_header_get_name(const HttpHeader * header) {
     return header->name;
 }
 
-const char * http_header_get_value(HttpHeader * header) {
+const char * http_header_get_value(const HttpHeader * header) {
     return header->value;
 }
