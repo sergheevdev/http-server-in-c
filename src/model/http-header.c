@@ -33,6 +33,7 @@ HttpHeader * http_header_create(char * name, char * value) {
     }
     http_header->name = name;
     http_header->value = value;
+    http_header->next = NULL;
     return http_header;
 }
 
@@ -60,6 +61,7 @@ void http_header_free(HttpHeader * header) {
     if(header == NULL) return;
     if(header->name != NULL) free(header->name);
     if(header->value != NULL) free(header->value);
+    header->next = NULL;
     free(header);
 }
 
