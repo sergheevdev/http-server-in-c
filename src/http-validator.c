@@ -42,3 +42,28 @@ bool http_validator_is_token(char character) {
            !iscntrl(character) &&
            character != 127;
 }
+
+bool http_validator_is_uri(char character) {
+    return (character >= 'a' && character <= 'z') ||
+           (character >= 'A' && character <= 'Z') ||
+           (character >= '0' && character <= '9') ||
+           character == '.' ||
+           character == '-' ||
+           character == '_' ||
+           character == '~' ||
+           character == '!' ||
+           character == '$' ||
+           character == '&' ||
+           character == '\'' ||
+           character == '(' ||
+           character == ')' ||
+           character == '*' ||
+           character == '+' ||
+           character == ',' ||
+           character == ';' ||
+           character == '=' ||
+           character == ':' ||
+           character == '@' ||
+           character == '%' ||
+           character == '/';
+}
