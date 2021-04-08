@@ -1,10 +1,13 @@
-/* http-header.h */
+/* http-request.h */
 #ifndef HTTP_REQUEST_H
 #define HTTP_REQUEST_H
 
 struct request {
-    char * name;
-    char * value;
+    HttpMethod * method;
+    HttpUri * uri;
+    HttpVersion * version;
+    HttpHeader * header;
+    HttpBody * body;
 };
 
 typedef struct request HttpRequest;
