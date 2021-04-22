@@ -1,10 +1,4 @@
-/**
- * O (n+a*t) time | O (n+a*(-f+t)) space
- * - where n is the length of the original string
- * - where a is the number of "from" string ocurrences
- * - where f is the length of "from" string
- * - where t is the length of "to" string
- */
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -20,14 +14,61 @@ struct string_builder {
 
 typedef struct string_builder StringBuilder;
 
+/**
+ * Creates a string builder with the default initial capacity and resize increment.
+ *
+ * The returned builder must be freed by the client after its usage.
+ *
+ * @return a new string builder
+ */
 StringBuilder * string_builder_create_default();
+
+/**
+ * Creates a string builder with a concrete initial capacity and resize increment.
+ *
+ * The returned builder must be freed by the client after its usage.
+ *
+ * @param initial_capacity initial amount of dynamically allocated characters
+ * @param resize_increment the increment of character on resize
+ *
+ * @return a new string builder
+ */
 StringBuilder * string_builder_create(size_t initial_capacity, size_t resize_increment);
 
+/**
+ * Appends a character to the given string builder.
+ *
+ * @param string_builder the string builder to whom the character must be appended
+ * @param character the character to be appended
+ *
+ * @return true if the append operation completed successfully, false otherwise
+ */
 bool string_builder_append(StringBuilder * string_builder, char character);
 
+/**
+ * Returns the builder's pointer to the constructed string (does not persist after
+ * builder structure free).
+ *
+ * This string is freed when you free the builder structure (use with caution).
+ *
+ * @param string_builder the string builder from whom the built chain is extracted
+ *
+ * @return the built chain by the given string builder
+ */
 char * string_builder_result(StringBuilder * string_builder);
+
+/**
+ * Returns a copy of the constructed string (persists after builder structure free).
+ *
+ * The returned string must be freed by the client after its usage.
+ *
+ * @param string_builder the string builder from whom the built chain is extracted
+ *
+ * @return a copy of the built chain by the given string builder
+ */
 char * string_builder_result_as_copy(StringBuilder * string_builder);
 
+// Default implementation values (to be statistically tested for best default values)
 static const int DEFAULT_INITIAL_CAPACITY = 128;
 static const int DEFAULT_RESIZE_INCREMENT = 64;
 
@@ -36,14 +77,22 @@ StringBuilder * string_builder_create_default() {
 }
 
 StringBuilder * string_builder_create(size_t initial_capacity, size_t resize_increment) {
+    if(initial_capacity < 1) {
+        fprintf(stderr, "The 'initial_capacity' must be a positive integer bigger or equal to '1'\n");
+        return NULL;
+    }
+    if(initial_capacity < 1) {
+        fprintf(stderr, "The 'resize_increment' must be a positive integer bigger or equal to '1'\n");
+        return NULL;
+    }
     char * built_chain = malloc(sizeof(char) * initial_capacity);
     if(built_chain == NULL) {
-        fprintf(stderr, "Unable to allocate memory for holder at string_builder_create\n");
+        fprintf(stderr, "Unable to allocate memory for 'built_chain' at 'string_builder_create'\n");
         return NULL;
     }
     StringBuilder * string_builder = malloc(sizeof(StringBuilder));
     if(string_builder == NULL) {
-        fprintf(stderr, "Unable to allocate memory for struct at string_builder_create\n");
+        fprintf(stderr, "Unable to allocate memory for 'string_builder' at 'string_builder_create'\n");
         free(built_chain);
         return NULL;
     }
@@ -56,11 +105,16 @@ StringBuilder * string_builder_create(size_t initial_capacity, size_t resize_inc
 }
 
 bool string_builder_ensure_capacity(StringBuilder * string_builder, size_t chars_amount) {
+    if(string_builder == NULL) {
+        fprintf(stderr, "Trying to ensure the capacity of a NULL builder at 'string_builder_ensure_capacity'\n");
+        return false;
+    }
+    // Always ensure one spot for the string null terminator
     while(string_builder->used_capacity + chars_amount > string_builder->max_capacity - 1) {
         size_t new_size = string_builder->max_capacity + string_builder->resize_increment;
         char * resized_chain = realloc(string_builder->built_chain, sizeof(char) * new_size);
         if(resized_chain == NULL) {
-            fprintf(stderr, "Unable to reallocate memory of the new builder at string_builder_ensure_capacity\n");
+            fprintf(stderr, "Unable to reallocate memory for 'resized_chain' at 'string_builder_ensure_capacity'\n");
             return false;
         }
         string_builder->built_chain = resized_chain;
@@ -102,6 +156,14 @@ char * string_builder_result_as_copy(StringBuilder * string_builder) {
 
 static const int BUFFER_SIZE = 128;
 
+
+/**
+ * O (n+a*t) time | O (n+a*(-f+t)) space
+ * - where n is the length of the original string
+ * - where a is the number of "from" string ocurrences
+ * - where f is the length of "from" string
+ * - where t is the length of "to" string
+ */
 char * string_replace_all(char * original, char * from, char * to) {
 
     // Allocate the initial builder with its default capacity
