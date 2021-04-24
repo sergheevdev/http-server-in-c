@@ -29,7 +29,7 @@ StringBuilder * string_builder_create_default();
  * The returned builder must be freed by the client after its usage.
  *
  * @param initial_capacity initial amount of dynamically allocated characters
- * @param resize_increment the increment of character on resize
+ * @param resize_increment the increment of characters on resize
  *
  * @return a new string builder
  */
@@ -38,7 +38,7 @@ StringBuilder * string_builder_create(size_t initial_capacity, size_t resize_inc
 /**
  * Appends a character to the given string builder.
  *
- * @param string_builder the string builder to whom the character must be appended
+ * @param string_builder the string builder to whom the character must be appended to
  * @param character the character to be appended
  *
  * @return true if the append operation completed successfully, false otherwise
@@ -46,8 +46,7 @@ StringBuilder * string_builder_create(size_t initial_capacity, size_t resize_inc
 bool string_builder_append(StringBuilder * string_builder, char character);
 
 /**
- * Returns the builder's pointer to the constructed string (does not persist after
- * builder structure free).
+ * Returns the builder's internal pointer to the constructed string.
  *
  * This string is freed when you free the builder structure (use with caution).
  *
@@ -58,13 +57,13 @@ bool string_builder_append(StringBuilder * string_builder, char character);
 char * string_builder_result(StringBuilder * string_builder);
 
 /**
- * Returns a copy of the constructed string (persists after builder structure free).
+ * Returns a copy of the constructed string.
  *
  * The returned string must be freed by the client after its usage.
  *
- * @param string_builder the string builder from whom the built chain is extracted
+ * @param string_builder the string builder from whom the built chain copy is extracted
  *
- * @return a copy of the built chain by the given string builder
+ * @return a copy of the string builder's built chain
  */
 char * string_builder_result_as_copy(StringBuilder * string_builder);
 
@@ -78,11 +77,13 @@ StringBuilder * string_builder_create_default() {
 
 StringBuilder * string_builder_create(size_t initial_capacity, size_t resize_increment) {
     if(initial_capacity < 1) {
-        fprintf(stderr, "The 'initial_capacity' must be a positive integer bigger or equal to '1'\n");
+        fprintf(stderr, "The 'initial_capacity' provided to 'string_builder_create' "
+                        "must be a positive integer, bigger or equal to '1'\n");
         return NULL;
     }
     if(initial_capacity < 1) {
-        fprintf(stderr, "The 'resize_increment' must be a positive integer bigger or equal to '1'\n");
+        fprintf(stderr, "The 'resize_increment' provided to 'string_builder_create' "
+                        "must be a positive integer, bigger or equal to '1'\n");
         return NULL;
     }
     char * built_chain = malloc(sizeof(char) * initial_capacity);
@@ -109,6 +110,10 @@ bool string_builder_ensure_capacity(StringBuilder * string_builder, size_t chars
         fprintf(stderr, "Trying to ensure the capacity of a NULL builder at 'string_builder_ensure_capacity'\n");
         return false;
     }
+    if(chars_amount < 1) {
+        fprintf(stderr, "The 'chars_amount' capacity to be ensured at 'string_builder_create' "
+                        "must be a positive integer, bigger or equal to '1'\n");
+    }
     // Always ensure one spot for the string null terminator
     while(string_builder->used_capacity + chars_amount > string_builder->max_capacity - 1) {
         size_t new_size = string_builder->max_capacity + string_builder->resize_increment;
@@ -125,7 +130,7 @@ bool string_builder_ensure_capacity(StringBuilder * string_builder, size_t chars
 
 bool string_builder_append(StringBuilder * string_builder, char character) {
     if(string_builder == NULL) {
-        fprintf(stderr, "Trying to append to a NULL builder at string_builder_append\n");
+        fprintf(stderr, "Trying to append a character to a NULL builder at 'string_builder_append'\n");
         return false;
     }
     bool success = string_builder_ensure_capacity(string_builder, 1);
