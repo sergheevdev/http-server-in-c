@@ -116,6 +116,7 @@ bool string_builder_ensure_capacity(StringBuilder * string_builder, size_t chars
     }
     // Always ensure one spot for the string null terminator
     while(string_builder->used_capacity + chars_amount > string_builder->max_capacity - 1) {
+        // Increment the builder's size (new size = old size + increment)
         size_t new_size = string_builder->max_capacity + string_builder->resize_increment;
         char * resized_chain = realloc(string_builder->built_chain, sizeof(char) * new_size);
         if(resized_chain == NULL) {
@@ -133,24 +134,77 @@ bool string_builder_append(StringBuilder * string_builder, char character) {
         fprintf(stderr, "Trying to append a character to a NULL builder at 'string_builder_append'\n");
         return false;
     }
-    bool success = string_builder_ensure_capacity(string_builder, 1);
-    if(success == false) return false;
+    // Make sure the builder's capacity allows one more character (if not resize the buffer)
+    bool is_capacity_ensured = string_builder_ensure_capacity(string_builder, 1);
+    if(is_capacity_ensured == false) return false;
+    // Get the last unused character position to which the new character is to be appended
     char * current_position = string_builder->built_chain + string_builder->used_capacity;
     (* current_position) = character;
     string_builder->used_capacity++;
     return true;
 }
 
+bool string_builder_remove(StringBuilder * string_builder, size_t start_index, size_t stop_index) {
+    if(start_index < 0) {
+        fprintf(stderr, "Trying to pass an invalid 'start_index' value with "
+                        "value less than '1' at 'string_builder_remove'\n");
+        return false;
+    }
+    if(stop_index < 0) {
+        fprintf(stderr, "Trying to pass an invalid 'stop_index' value with "
+                        "value less than '1' at 'string_builder_remove'\n");
+        return false;
+    }
+    if(stop_index > string_builder->max_capacity - 1) {
+        fprintf(stderr, "Trying to pass an invalid 'stop_index' value with value "
+                        "bigger than the chain size at 'string_builder_remove'\n");
+        return false;
+    }
+    char * start = string_builder->built_chain + start_index;
+    char * next = string_builder->built_chain + stop_index;
+    size_t left_to_move = string_builder->used_capacity - stop_index;
+    string_builder->used_capacity -= left_to_move;
+    string_builder->built_chain -= (left_to_move - 1);
+    while(left_to_move != 0) {
+        (* start) = (* next);
+        start++;
+        next++;
+        left_to_move--;
+    }
+    return true;
+}
+
 char * string_builder_result(StringBuilder * string_builder) {
+    // We include the null terminator in the resize
+    size_t new_size = string_builder->used_capacity + 1;
+    char * resized_chain = realloc(string_builder->built_chain, sizeof(char) * new_size);
+    if(resized_chain == NULL) {
+        fprintf(stderr, "Unable to reallocate memory for 'resized_chain' at 'string_builder_result'\n");
+        return false;
+    }
+    string_builder->built_chain = resized_chain;
+    // Add a null terminator to our built string
+    char * current_position = string_builder->built_chain + string_builder->used_capacity;
+    (* current_position) = '\0';
     return string_builder->built_chain;
 }
 
 char * string_builder_result_as_copy(StringBuilder * string_builder) {
     char * copy = strdup(string_builder->built_chain);
     if(copy == NULL) {
-        fprintf(stderr, "Failed to allocate memory for the built_chain copy at string_builder_result_as_copy\n");
+        fprintf(stderr, "Failed to allocate memory for the 'built_chain' copy at 'string_builder_result_as_copy'\n");
         return NULL;
     }
+    size_t new_size = string_builder->used_capacity + 1;
+    char * resized_chain = realloc(copy, sizeof(char) * new_size);
+    if(resized_chain == NULL) {
+        fprintf(stderr, "Unable to reallocate memory for 'resized_chain' at 'string_builder_result'\n");
+        return false;
+    }
+    copy = resized_chain;
+    // Add a null terminator to our built string
+    char * current_position = copy + string_builder->used_capacity;
+    (* current_position) = '\0';
     return copy;
 }
 
