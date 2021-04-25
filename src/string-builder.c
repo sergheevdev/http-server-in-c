@@ -1,8 +1,7 @@
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdbool.h>
+#include "string-builder.h"
 
 struct string_builder {
     char * built_chain;
@@ -12,75 +11,18 @@ struct string_builder {
     size_t resize_increment;
 };
 
-typedef struct string_builder StringBuilder;
-
-
+/**
+ * Asserts that the condition is true and if not sends the failure message.
+ *
+ * @param condition the condition to be met
+ * @param message the error message to be printed if the condition is not met
+ */
 void assert(int condition, char * message) {
     if(condition != 1) {
         printf("%s\n", message);
         exit(1);
     }
 }
-
-/**
- * Creates a string builder with the default initial capacity and resize increment.
- *
- * The returned builder must be freed by the client after its usage.
- *
- * @return a new string builder
- */
-StringBuilder * string_builder_create_default();
-
-/**
- * Creates a string builder with a concrete initial capacity and resize increment.
- *
- * The returned builder must be freed by the client after its usage.
- *
- * @param initial_capacity initial amount of dynamically allocated characters
- * @param resize_increment the increment of characters on resize
- *
- * @return a new string builder
- */
-StringBuilder * string_builder_create(size_t initial_capacity, size_t resize_increment);
-
-/**
- * Frees the string builder structure and all its dynamically allocated contents.
- *
- * @param string_builder the string builder that is about to be freed
- */
-void string_builder_destroy(StringBuilder * string_builder);
-
-/**
- * Appends a character to the given string builder.
- *
- * @param string_builder the string builder to whom the character must be appended to
- * @param character the character to be appended
- *
- * @return true if the append operation completed successfully, false otherwise
- */
-bool string_builder_append(StringBuilder * string_builder, char character);
-
-/**
- * Returns the builder's internal pointer to the constructed string.
- *
- * This string is freed when you free the builder structure (use with caution).
- *
- * @param string_builder the string builder from whom the built chain is extracted
- *
- * @return the built chain by the given string builder
- */
-char * string_builder_result(StringBuilder * string_builder);
-
-/**
- * Returns a copy of the constructed string.
- *
- * The returned string must be freed by the client after its usage.
- *
- * @param string_builder the string builder from whom the built chain copy is extracted
- *
- * @return a copy of the string builder's built chain
- */
-char * string_builder_result_as_copy(StringBuilder * string_builder);
 
 // Default implementation values (to be statistically tested for best default values)
 static const int DEFAULT_INITIAL_CAPACITY = 128;
@@ -246,27 +188,57 @@ void string_builder_remove_test() {
     string_builder_append(string_builder, 'B');
     string_builder_append(string_builder, 'C');
     string_builder_append(string_builder, 'D');
+    string_builder_append(string_builder, 'E');
     string_builder_remove(string_builder, 1, 2);
     assert((* string_builder->built_chain) == 'A', "Expected first char equal to 'A'");
     assert((* (string_builder->built_chain + 1)) == 'D', "Expected second char equal to 'D'");
+    assert((* (string_builder->built_chain + 2)) == 'E', "Expected third char equal to 'E'");
+    assert(string_builder->used_capacity == 3, "Expected used capacity to be equal to '3'");
+    string_builder_destroy(string_builder);
+    printf("The test 'string_builder_remove_test' passed successfully!\n");
 }
 
 char * string_builder_result(StringBuilder * string_builder) {
-    // We include the null terminator in the resize
-    size_t new_size = string_builder->used_capacity + 1;
-    char * resized_chain = realloc(string_builder->built_chain, sizeof(char) * new_size);
-    if(resized_chain == NULL) {
-        fprintf(stderr, "Unable to reallocate memory for 'resized_chain' at 'string_builder_result'\n");
+    if(string_builder == NULL) {
+        fprintf(stderr, "Trying to get the result of a NULL builder at 'string_builder_result'\n");
         return false;
     }
-    string_builder->built_chain = resized_chain;
+    // If the chain is not of the proper size
+    if(string_builder->used_capacity != string_builder->max_capacity - 1) {
+        size_t new_size = string_builder->used_capacity + 1;
+        char * resized_chain = realloc(string_builder->built_chain, sizeof(char) * new_size);
+        if (resized_chain == NULL) {
+            fprintf(stderr, "Unable to reallocate memory for 'resized_chain' at 'string_builder_result'\n");
+            return NULL;
+        }
+        string_builder->built_chain = resized_chain;
+    }
     // Add a null terminator to our built string
-    char * current_position = string_builder->built_chain + string_builder->used_capacity;
-    (* current_position) = '\0';
+    char * next_free_position = string_builder->built_chain + string_builder->used_capacity;
+    (* next_free_position) = '\0';
     return string_builder->built_chain;
 }
 
+void string_builder_result_test() {
+    StringBuilder * string_builder = string_builder_create_default();
+    string_builder_append(string_builder, 'A');
+    string_builder_append(string_builder, 'B');
+    string_builder_append(string_builder, 'C');
+    string_builder_append(string_builder, 'D');
+    string_builder_remove(string_builder, 0, 2);
+    char * given_result = string_builder_result(string_builder);
+    char * expected_result = strdup("D");
+    assert(strcmp(given_result, expected_result) == 0, "Expected the results to be equal");
+    free(expected_result);
+    string_builder_destroy(string_builder);
+    printf("The test 'string_builder_result_test' passed successfully!\n");
+}
+
 char * string_builder_result_as_copy(StringBuilder * string_builder) {
+    if(string_builder == NULL) {
+        fprintf(stderr, "Trying to get a copy of the result of a NULL builder at 'string_builder_result_as_copy'\n");
+        return false;
+    }
     char * copy = strdup(string_builder->built_chain);
     if(copy == NULL) {
         fprintf(stderr, "Failed to allocate memory for the 'built_chain' copy at 'string_builder_result_as_copy'\n");
@@ -285,10 +257,23 @@ char * string_builder_result_as_copy(StringBuilder * string_builder) {
     return copy;
 }
 
-
-
-
-
+void string_builder_result_as_copy_test() {
+    StringBuilder * string_builder = string_builder_create_default();
+    string_builder_append(string_builder, 'A');
+    string_builder_append(string_builder, 'B');
+    string_builder_append(string_builder, 'C');
+    string_builder_append(string_builder, 'D');
+    string_builder_remove(string_builder, 0, 2);
+    char * given_result = string_builder_result_as_copy(string_builder);
+    char * internal_result = string_builder_result(string_builder);
+    assert(given_result != internal_result, "Expected the result pointers to be different");
+    char * expected_result = strdup("D");
+    assert(strcmp(given_result, expected_result) == 0, "Expected the results to be equal");
+    free(expected_result);
+    free(given_result);
+    string_builder_destroy(string_builder);
+    printf("The test 'string_builder_result_as_copy_test' passed successfully!\n");
+}
 
 int main() {
     fclose(stderr);
@@ -297,4 +282,6 @@ int main() {
     string_builder_ensure_capacity_test();
     string_builder_append_test();
     string_builder_remove_test();
+    string_builder_result_test();
+    string_builder_result_as_copy_test();
 }
