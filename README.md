@@ -2,6 +2,10 @@
 
 [![MIT License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](https://github.com/sergheevdev/http-server-in-c/blob/main/LICENSE)
 
+## Announcement
+
+This server has memory leaks and is pending to be refactored completely whenever I have time, I already designed a new architecture and just need time to implemented, anyway you can check the draft architecture at the **develop** branch of this current project if you are intrested in progress.
+
 ## Introduction
 
 **Simple HTTP Server**: is a simple HTTP server implementation attempt in C trying to apply the [RFC2616](https://tools.ietf.org/html/rfc2616) standard.
