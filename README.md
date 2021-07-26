@@ -4,7 +4,7 @@
 
 ## Announcement
 
-This server has memory leaks and is pending to be refactored completely whenever I have time, I already designed a new architecture and just need time to implemented, anyway you can check the draft architecture at the **develop** branch of this current project if you are intrested in progress.
+This server has memory leaks and is pending to be refactored completely whenever I have time, I already designed a new architecture and just need time to implement it, anyway you can check the draft architecture at the **develop** branch of this current project if you are intrested in progress.
 
 ## Introduction
 
